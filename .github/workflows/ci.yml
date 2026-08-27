@@ -138,6 +138,20 @@ jobs:
       - name: Rebuild local database from migrations and seed
         run: pnpm exec supabase db reset --local
 
+      - name: Run pgTAP schema tests
+        run: pnpm exec supabase test db
+
+      - name: Lint local database
+        run: pnpm exec supabase db lint --level error --schema public
+
+      - name: Verify generated database types are current
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp_file="$(mktemp)"
+          pnpm exec supabase gen types typescript --local --schema public > "$tmp_file"
+          diff -u src/types/database.types.ts "$tmp_file"
+
       - name: Stop local Supabase
         if: always()
         run: pnpm exec supabase stop --no-backup
