@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AppView, type AppViewAuth } from '../src/App'
 import { AuthenticatedAppShellView } from '../src/app/AuthenticatedAppShell'
 import { PRIMARY_ROUTES, resolveAppRoute } from '../src/app/router'
@@ -41,6 +41,24 @@ describe('mobile application shell', () => {
     expect(markup).toContain('Sign in')
     expect(markup).toContain('TaskRing AI Secretary')
     expect(markup).not.toContain('aria-label="Primary"')
+  })
+
+  it('authenticated AppView enters the application shell', () => {
+    vi.stubGlobal('window', {
+      location: { pathname: '/today' },
+      history: { replaceState: vi.fn(), pushState: vi.fn() },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })
+    vi.stubGlobal('navigator', { onLine: true })
+
+    try {
+      const markup = renderToStaticMarkup(<AppView auth={authState('authenticated')} supabaseHealth="online" />)
+      expect(markup).toContain('aria-label="Primary"')
+      expect(markup).toContain('<h1 id="today-title">Today</h1>')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('authenticated shell exposes the five primary surfaces', () => {
