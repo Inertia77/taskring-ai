@@ -24,13 +24,39 @@ const signedOutState: AuthSessionState = {
 }
 
 describe('minimal auth session boundary', () => {
-  it('restores no session as signed out', async () => {
+  it('restores no session as signed out without an error', async () => {
     const client = clientWithAuth({
       getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     })
     const restored = await restoreSession(client)
     const state = reduceAuthState(signedOutState, { type: 'session', session: restored.session })
     expect(state.status).toBe('signed-out')
+    expect(state.session).toBeNull()
+    expect(state.errorMessage).toBeNull()
+  })
+
+  it('restores a session error as signed out while preserving only a safe message', async () => {
+    const client = clientWithAuth({
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: null },
+        error: new Error('backend detail password=hunter2 token=secret-jwt'),
+      }),
+    })
+    const restored = await restoreSession(client)
+    expect(restored.errorMessage).not.toBeNull()
+
+    const state = reduceAuthState(signedOutState, {
+      type: 'session-error',
+      message: restored.errorMessage!,
+    })
+
+    expect(state.status).toBe('signed-out')
+    expect(state.session).toBeNull()
+    expect(state.errorMessage).toBe('Authentication failed. Please try again.')
+    expect(state.errorMessage).not.toContain('password')
+    expect(state.errorMessage).not.toContain('token')
+    expect(state.errorMessage).not.toContain('hunter2')
+    expect(state.errorMessage).not.toContain('secret-jwt')
   })
 
   it('restores an existing session as authenticated', async () => {
@@ -41,6 +67,7 @@ describe('minimal auth session boundary', () => {
     const state = reduceAuthState(signedOutState, { type: 'session', session: restored.session })
     expect(state.status).toBe('authenticated')
     expect(state.session).toBe(fakeSession)
+    expect(state.errorMessage).toBeNull()
   })
 
   it('shows a safe sign-in error without reflecting sensitive details', async () => {
