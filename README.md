@@ -10,7 +10,7 @@ No production task, goal, project, scheduler, AI, Notion, Gmail, Calendar, GUCC,
 
 ## Local setup
 
-1. Install Node.js 20 or newer and enable pnpm via Corepack.
+1. Install Node.js 22.13 or newer and enable pnpm via Corepack.
 2. Copy `.env.example` to `.env.local`.
 3. Fill only the new TaskRingAI project URL and publishable key.
 4. Run `pnpm install --frozen-lockfile`.
