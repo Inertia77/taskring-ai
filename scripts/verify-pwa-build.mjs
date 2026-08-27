@@ -15,8 +15,8 @@ assert.ok(existsSync(icon512Path), '512x512 PWA icon must exist')
 
 function assertPngDimensions(path, expectedWidth, expectedHeight) {
   const png = readFileSync(path)
-  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  assert.ok(png.subarray(0, 8).equals(signature), `${path} must be a PNG file`)
+  const expectedSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  assert.deepEqual([...png.subarray(0, 8)], expectedSignature, `${path} must be a PNG file`)
   assert.equal(png.toString('ascii', 12, 16), 'IHDR', `${path} must contain a PNG IHDR header`)
   assert.equal(png.readUInt32BE(16), expectedWidth, `${path} width must be ${expectedWidth}`)
   assert.equal(png.readUInt32BE(20), expectedHeight, `${path} height must be ${expectedHeight}`)
@@ -58,5 +58,3 @@ assert.ok(
   !/supabase\.co|\/rest\/v1\/|\/auth\/v1\/|\/storage\/v1\//.test(viteConfig),
   'PWA config must not reference private API caching targets',
 )
-
-console.log('PWA artifact verification passed: install icons valid, static shell precached, no private API runtime cache.')
