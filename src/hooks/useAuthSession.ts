@@ -22,6 +22,7 @@ export interface AuthSessionState {
 type AuthAction =
   | { type: 'begin' }
   | { type: 'session'; session: Session | null }
+  | { type: 'session-error'; message: string }
   | { type: 'error'; message: string }
   | { type: 'notice'; message: string }
 
@@ -38,6 +39,14 @@ export function reduceAuthState(
         session: action.session,
         busy: false,
         errorMessage: null,
+        notice: null,
+      }
+    case 'session-error':
+      return {
+        status: 'signed-out',
+        session: null,
+        busy: false,
+        errorMessage: action.message,
         notice: null,
       }
     case 'error':
@@ -79,15 +88,14 @@ export function useAuthSession() {
     void restoreSession(supabase).then((result) => {
       if (!active) return
       if (result.errorMessage) {
-        dispatch({ type: 'error', message: result.errorMessage })
-        dispatch({ type: 'session', session: null })
+        dispatch({ type: 'session-error', message: result.errorMessage })
         return
       }
       dispatch({ type: 'session', session: result.session })
     })
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (active && event !== 'INITIAL_SESSION') {
         dispatch({ type: 'session', session })
       }
     })
