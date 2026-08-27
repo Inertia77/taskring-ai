@@ -19,18 +19,24 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.15.1
+          version: 10.34.5
           run_install: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Generate lockfile
-        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Install and generate lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Initialize Supabase CLI config
         run: pnpm exec supabase init --force
+
+      - name: Verify generated CLI config
+        run: |
+          pnpm exec supabase --version
+          test -f pnpm-lock.yaml
+          test -f supabase/config.toml
 
       - name: Commit generated reproducibility files
         run: |
