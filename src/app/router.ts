@@ -41,7 +41,6 @@ export function useAppRouter() {
   useEffect(() => {
     if (resolved.redirectTo && window.location.pathname !== resolved.redirectTo) {
       window.history.replaceState(null, '', resolved.redirectTo)
-      setPathname(resolved.redirectTo)
     }
   }, [resolved.redirectTo])
 
