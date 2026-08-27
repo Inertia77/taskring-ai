@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:pwa": "node scripts/verify-pwa-build.mjs",
     "supabase:version": "supabase --version"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.68.0",
     "vite": "8.2.2",
+    "vite-plugin-pwa": "1.3.0",
     "vitest": "4.1.10"
   }
 }

@@ -47,6 +47,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Verify PWA artifacts and offline boundary
+        run: pnpm test:pwa
+
   security:
     name: Security
     runs-on: ubuntu-latest
