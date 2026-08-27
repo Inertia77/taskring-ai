@@ -1,0 +1,42 @@
+name: WP004 Lockfile Generator
+
+on:
+  push:
+    branches:
+      - feature/wp004-app-shell-pwa
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/wp004-app-shell-pwa
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Refresh lockfile from pinned package manifest
+        run: pnpm install --lockfile-only --ignore-scripts
+
+      - name: Commit generated lockfile and remove generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/wp004-lockfile-generator.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml .github/workflows/wp004-lockfile-generator.yml
+          git diff --cached --exit-code && exit 0
+          git commit -m "WP004: refresh lockfile for PWA dependency"
+          git push origin HEAD:feature/wp004-app-shell-pwa
