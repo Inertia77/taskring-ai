@@ -1,0 +1,1 @@
+PWA install icons are generated from the adjacent TaskRing SVG source artwork. The SVG files are source artwork only; the manifest references raster 192x192 and 512x512 PNG install icons.
