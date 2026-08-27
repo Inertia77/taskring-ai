@@ -1,0 +1,65 @@
+name: WP003 Migration Generator
+
+on:
+  push:
+    branches:
+      - security/wp003-auth-rls
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: Generate real Supabase migration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate migration and align local Auth config
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec supabase --version
+          pnpm exec supabase migration new --help >/dev/null
+          pnpm exec supabase migration new auth_rls_v01
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_auth_rls_v01.sql' | sort | tail -n 1)"
+          test -n "$migration_file"
+          cat supabase/wp003_auth_rls.sql > "$migration_file"
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/config.toml')
+          text = path.read_text()
+          old_site = 'site_url = "http://127.0.0.1:3000"'
+          old_redirects = 'additional_redirect_urls = ["https://127.0.0.1:3000"]'
+          assert old_site in text, 'unexpected site_url baseline'
+          assert old_redirects in text, 'unexpected redirect baseline'
+          text = text.replace(old_site, 'site_url = "http://localhost:5173"')
+          text = text.replace(old_redirects, 'additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]')
+          assert 'enable_anonymous_sign_ins = false' in text
+          assert '[auth.email]' in text and 'enable_signup = true' in text
+          path.write_text(text)
+          PY
+          rm supabase/wp003_auth_rls.sql .github/workflows/wp003-generate.yml
+
+      - name: Commit generated artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --exit-code && { echo "No generated changes found"; exit 1; } || true
+          git commit -m "WP003: generate auth RLS migration [wp003-generated]"
+          git push origin HEAD:security/wp003-auth-rls

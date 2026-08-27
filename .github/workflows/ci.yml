@@ -105,6 +105,22 @@ jobs:
           fi
           echo "No credential signatures or prohibited Legacy identifiers found."
 
+      - name: Reject unsafe Auth/RLS shortcuts
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_files="$(find supabase/migrations -maxdepth 1 -type f -name '*_auth_rls_v01.sql' -print)"
+          test -n "$migration_files"
+          forbidden='auth\.role\(|user_metadata|SECURITY[[:space:]]+DEFINER|USING[[:space:]]*\([[:space:]]*true[[:space:]]*\)'
+          if grep -Ein -- "$forbidden" $migration_files; then
+            echo "Unsafe Auth/RLS shortcut found."
+            exit 1
+          fi
+          if git grep -n -E 'console\.(log|error|warn).*\b(access_token|refresh_token|password|session)\b' -- src; then
+            echo "Sensitive Auth logging pattern found in frontend source."
+            exit 1
+          fi
+
   supabase-local:
     name: Supabase Local Reproducibility
     runs-on: ubuntu-latest
@@ -131,6 +147,8 @@ jobs:
           test -d supabase/functions
           test -d supabase/tests
           test -f supabase/seed.sql
+          grep -F 'site_url = "http://localhost:5173"' supabase/config.toml
+          grep -F 'enable_anonymous_sign_ins = false' supabase/config.toml
 
       - name: Start local Supabase
         run: pnpm exec supabase start
@@ -138,11 +156,28 @@ jobs:
       - name: Rebuild local database from migrations and seed
         run: pnpm exec supabase db reset --local
 
-      - name: Run pgTAP schema tests
+      - name: Run pgTAP schema and RLS tests
         run: pnpm exec supabase test db
 
       - name: Lint local database
         run: pnpm exec supabase db lint --level error --schema public
+
+      - name: Real Auth and Data API ownership integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_file="$(mktemp)"
+          pnpm exec supabase status -o env > "$env_file"
+          api_url="$(sed -n 's/^API_URL="\([^"]*\)"$/\1/p' "$env_file")"
+          publishable_key="$(sed -n 's/^PUBLISHABLE_KEY="\([^"]*\)"$/\1/p' "$env_file")"
+          if [ -z "$publishable_key" ]; then
+            publishable_key="$(sed -n 's/^ANON_KEY="\([^"]*\)"$/\1/p' "$env_file")"
+          fi
+          rm -f "$env_file"
+          test -n "$api_url"
+          test -n "$publishable_key"
+          VITE_SUPABASE_URL="$api_url" VITE_SUPABASE_PUBLISHABLE_KEY="$publishable_key" \
+            pnpm exec vitest run tests/authDataApi.integration.test.ts
 
       - name: Verify generated database types are current
         shell: bash

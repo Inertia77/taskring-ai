@@ -16,6 +16,11 @@ body {
   min-height: 100vh;
 }
 
+button,
+input {
+  font: inherit;
+}
+
 .health-page {
   min-height: 100vh;
   display: grid;
@@ -59,4 +64,60 @@ h1 {
   padding-top: 18px;
   border-top: 1px solid #e5e5e5;
   font-size: 0.92rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.auth-form button,
+.sign-out-button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #171717;
+  border-radius: 10px;
+  background: #171717;
+  color: #fff;
+  cursor: pointer;
+}
+
+.auth-form button:disabled,
+.sign-out-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.auth-form .secondary-button {
+  background: #fff;
+  color: #171717;
+}
+
+.auth-message {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.auth-message.error {
+  font-weight: 650;
+}
+
+.sign-out-button {
+  width: 100%;
+  margin-top: 24px;
 }
