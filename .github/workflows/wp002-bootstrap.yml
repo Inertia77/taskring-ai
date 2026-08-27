@@ -1,0 +1,77 @@
+name: WP002 Bootstrap
+
+on:
+  push:
+    branches:
+      - schema/wp002-core-domain
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wp002-bootstrap
+  cancel-in-progress: true
+
+jobs:
+  generate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: schema/wp002-core-domain
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create migration with Supabase CLI
+        run: |
+          set -euo pipefail
+          pnpm exec supabase migration new core_domain_v01
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_core_domain_v01.sql' | sort | tail -n 1)"
+          test -n "$migration_file"
+          cat supabase/wp002_core_domain.sql > "$migration_file"
+          rm supabase/wp002_core_domain.sql
+          echo "MIGRATION_FILE=$migration_file" >> "$GITHUB_ENV"
+          echo "Generated $migration_file"
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Reset from migrations and seed
+        run: pnpm exec supabase db reset --local
+
+      - name: Run pgTAP schema tests
+        run: pnpm exec supabase test db
+
+      - name: Generate database types from local schema
+        run: |
+          mkdir -p src/types
+          pnpm exec supabase gen types typescript --local > src/types/database.types.ts
+          test -s src/types/database.types.ts
+
+      - name: Typecheck generated types
+        run: pnpm typecheck
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
+
+      - name: Commit generated migration and types
+        run: |
+          set -euo pipefail
+          rm .github/workflows/wp002-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "WP002: generate core domain migration and types"
+          git push origin HEAD:schema/wp002-core-domain
