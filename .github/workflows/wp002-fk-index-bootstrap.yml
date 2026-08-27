@@ -1,0 +1,99 @@
+name: WP002 FK Index Bootstrap
+
+on:
+  push:
+    branches:
+      - schema/wp002-core-domain
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wp002-fk-index-bootstrap
+  cancel-in-progress: true
+
+jobs:
+  generate-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: schema/wp002-core-domain
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create covering-index migration with Supabase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec supabase migration new cover_owner_fks
+          migration="$(ls -1t supabase/migrations/*_cover_owner_fks.sql | head -n1)"
+          cat > "$migration" <<'SQL'
+          -- Cover composite ownership foreign keys in FK column order.
+          create index projects_goal_owner_fk_idx on public.projects(goal_id, user_id);
+          create index tasks_project_owner_fk_idx on public.tasks(project_id, user_id);
+
+          create index daily_plan_items_plan_owner_fk_idx on public.daily_plan_items(plan_id, user_id);
+          create index daily_plan_items_task_owner_fk_idx on public.daily_plan_items(task_id, user_id);
+          create index daily_plan_items_carryover_owner_fk_idx on public.daily_plan_items(carryover_from_item_id, user_id);
+
+          create index task_events_task_owner_fk_idx on public.task_events(task_id, user_id);
+          create index task_events_plan_item_owner_fk_idx on public.task_events(plan_item_id, user_id);
+
+          create index user_feedback_task_owner_fk_idx on public.user_feedback(task_id, user_id);
+          create index user_feedback_plan_owner_fk_idx on public.user_feedback(plan_id, user_id);
+          create index user_feedback_plan_item_owner_fk_idx on public.user_feedback(plan_item_id, user_id);
+
+          create index source_links_task_owner_fk_idx on public.source_links(task_id, user_id);
+          create index source_links_project_owner_fk_idx on public.source_links(project_id, user_id);
+          create index source_links_goal_owner_fk_idx on public.source_links(goal_id, user_id);
+          create index source_links_inbox_owner_fk_idx on public.source_links(inbox_item_id, user_id);
+          SQL
+          echo "MIGRATION_PATH=$migration" >> "$GITHUB_ENV"
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Reset from migrations and seed
+        run: pnpm exec supabase db reset --local
+
+      - name: Run pgTAP schema tests
+        run: pnpm exec supabase test db
+
+      - name: Lint local database
+        run: pnpm exec supabase db lint --level error --schema public
+
+      - name: Verify generated database types remain current
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp_file="$(mktemp)"
+          pnpm exec supabase gen types typescript --local > "$tmp_file"
+          diff -u src/types/database.types.ts "$tmp_file"
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop --no-backup
+
+      - name: Commit generated migration and remove bootstrap workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/wp002-fk-index-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$MIGRATION_PATH" supabase/tests/foreign_key_indexes.test.sql .github/workflows/wp002-fk-index-bootstrap.yml
+          git commit -m "WP002: add covering indexes for owner FKs"
+          git push origin HEAD:schema/wp002-core-domain
