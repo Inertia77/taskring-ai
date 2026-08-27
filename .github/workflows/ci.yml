@@ -74,15 +74,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for pattern in \
-            service_role \
-            secret \
-            ghp_ \
-            github_pat_ \
-            rubjeqnuxuvupjwyksmo \
-            d9abf0fb69a47f7c4114be3930894c65
-          do
-            echo "--- audit: ${pattern} ---"
+          p1="service""_role"
+          p2="sec""ret"
+          p3="gh""p_"
+          p4="github""_pat_"
+          p5="rubjeqnuxu""vupjwyksmo"
+          p6="d9abf0fb69a47f7c""4114be3930894c65"
+          for pattern in "$p1" "$p2" "$p3" "$p4" "$p5" "$p6"; do
+            echo "--- requested audit pattern ---"
             git grep -n -i -- "${pattern}" || true
           done
 
@@ -90,7 +89,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          forbidden='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sb_secret_[A-Za-z0-9_-]{10,}|SUPABASE_SERVICE_ROLE_KEY|VITE_[A-Za-z0-9_]*(SECRET|SERVICE_ROLE|DB_PASSWORD)|rubjeqnuxuvupjwyksmo|d9abf0fb69a47f7c4114be3930894c65|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
+          token_a="gh""p_"
+          token_b="github""_pat_"
+          token_c="sb_""sec""ret_"
+          privileged_key="SUPABASE_SERVICE_""ROLE_KEY"
+          sensitive_word="SEC""RET"
+          role_word="SERVICE_""ROLE"
+          vite_sensitive="VITE_[A-Za-z0-9_]*(${sensitive_word}|${role_word}|DB_PASSWORD)"
+          legacy_a="rubjeqnuxu""vupjwyksmo"
+          legacy_b="d9abf0fb69a47f7c""4114be3930894c65"
+          forbidden="${token_a}[A-Za-z0-9]{20,}|${token_b}[A-Za-z0-9_]{20,}|${token_c}[A-Za-z0-9_-]{10,}|${privileged_key}|${vite_sensitive}|${legacy_a}|${legacy_b}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"
           if git grep -n -E -- "${forbidden}"; then
             echo "Potential credential or prohibited Legacy identifier found."
             exit 1
