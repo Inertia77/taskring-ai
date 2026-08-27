@@ -1,6 +1,7 @@
 import type { SupabaseHealth } from '../lib/supabaseHealth'
 import { BottomNavigation } from '../components/navigation/BottomNavigation'
-import { NetworkStatus, useNetworkStatus } from '../components/NetworkStatus'
+import { NetworkStatus } from '../components/NetworkStatus'
+import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
