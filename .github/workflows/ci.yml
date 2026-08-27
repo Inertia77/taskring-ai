@@ -149,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           tmp_file="$(mktemp)"
-          pnpm exec supabase gen types typescript --local --schema public > "$tmp_file"
+          pnpm exec supabase gen types typescript --local > "$tmp_file"
           diff -u src/types/database.types.ts "$tmp_file"
 
       - name: Stop local Supabase
