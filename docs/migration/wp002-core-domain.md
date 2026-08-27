@@ -1,13 +1,19 @@
-# WP002 Core Domain Migration
+# WP002 Core Domain Migrations
 
-Migration: `supabase/migrations/20260827145827_core_domain_v01.sql`
+Primary schema migration:
 
-This migration establishes TaskRing AI Secretary Core Domain Schema v0.1.
+- `supabase/migrations/20260827145827_core_domain_v01.sql`
+
+Performance follow-up migration:
+
+- `supabase/migrations/20260827150828_cover_owner_fks.sql`
+
+Together these migrations establish TaskRing AI Secretary Core Domain Schema v0.1 and provide covering indexes for composite ownership foreign keys.
 
 ## Discipline
 
-- The SQL was created and verified through the Supabase CLI migration workflow.
-- The repository migration version is aligned with the version recorded by the TaskRingAI cloud deployment so future migration tooling sees one consistent history.
+- Both SQL changes were created and verified through the Supabase CLI migration workflow.
+- Repository migration versions are aligned with the versions recorded by the TaskRingAI cloud deployment so future migration tooling sees one consistent history.
 - Verified locally with `supabase db reset --local`.
 - Verified by pgTAP schema tests in `supabase/tests/`.
 - Generated TypeScript database types live at `src/types/database.types.ts`.
