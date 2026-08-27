@@ -1,0 +1,1 @@
+-- WP001 intentionally seeds no application or private data.
