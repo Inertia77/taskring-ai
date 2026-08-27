@@ -1,0 +1,62 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #171717;
+  background: #f6f7f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.health-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.health-card {
+  width: min(520px, 100%);
+  padding: 40px;
+  border: 1px solid #dedede;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 6%);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 7vw, 3.4rem);
+  line-height: 1.05;
+}
+
+.system-status {
+  margin: 18px 0 34px;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.connection {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e5e5;
+  font-size: 0.92rem;
+}
