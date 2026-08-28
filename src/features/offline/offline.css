@@ -1,0 +1,130 @@
+.sync-summary-card,
+.offline-settings-card,
+.history-pending-section {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.sync-summary-card {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.sync-summary-card p,
+.offline-settings-card p {
+  margin: var(--space-1) 0 0;
+}
+
+.sync-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid currentColor;
+}
+
+.sync-badge.pending {
+  background: var(--surface-muted);
+}
+
+.sync-badge.conflict {
+  background: var(--surface-raised);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.sync-issue-panel {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  margin-top: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.sync-issue-panel p {
+  margin: 0;
+}
+
+.offline-snapshot-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.sync-section-heading {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.pending-timeline {
+  margin-top: 0;
+}
+
+.pending-history-event {
+  border-style: dashed;
+}
+
+.clear-offline-confirm {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.clear-offline-confirm p {
+  margin: 0;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.danger-button {
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 520px) {
+  .sync-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .sync-section-heading {
+    display: grid;
+  }
+}

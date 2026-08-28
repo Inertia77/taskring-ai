@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createDailyPlanRepository, type DailyPlanRepository } from '../../data/dailyPlans/dailyPlanRepository'
 import {
@@ -9,6 +9,17 @@ import {
 } from '../../data/dailyPlans/models'
 import { createExecutionRepository, type ExecutionRepository } from '../../data/execution/executionRepository'
 import type { TaskAction } from '../../data/execution/models'
+import {
+  commandDisplayAction,
+  commandsForPlanItem,
+  applyOptimisticProjection,
+} from '../../data/offline/projection'
+import {
+  getDefaultOfflineRepository,
+  type OfflineRepository,
+} from '../../data/offline/offlineRepository'
+import type { SyncSummary } from '../../data/offline/models'
+import { useOfflineCommands } from '../../data/offline/useOfflineCommands'
 import { historyQueryKeys, managementQueryKeys, todayQueryKeys } from '../../data/queryKeys'
 import { planDateForInstant, planningDateLabel, resolvePlanningTimeZone } from '../../data/planningDate'
 import { supabase } from '../../lib/supabaseClient'
@@ -20,6 +31,8 @@ interface TodayPageProps {
   online: boolean
   repository?: DailyPlanRepository
   executionRepository?: ExecutionRepository
+  offlineRepository?: OfflineRepository | null
+  syncNow?: (force?: boolean) => Promise<SyncSummary>
   planningTimeZone?: string
   now?: Date
   actionClock?: () => Date
@@ -42,6 +55,12 @@ function dueLabel(value: string | null, timeZone: string) {
   }).format(date)
 }
 
+function commandTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
+}
+
 function executionSummary(item: ActiveTodayPlan['items'][number]) {
   const event = item.latestEvent
   if (!event) return null
@@ -58,12 +77,14 @@ interface TodayPlanProps {
   timeZone: string
   online: boolean
   busy: boolean
+  commands: Awaited<ReturnType<OfflineRepository['listUserCommands']>>
   onEdit: () => void
   onAction: (itemId: string, action: TaskAction, details?: ExecutionDetails) => Promise<void>
   onFeedback: (itemId: string, content: string) => Promise<void>
+  onDiscard: (localId: string) => Promise<void>
 }
 
-function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback }: TodayPlanProps) {
+function TodayPlan({ plan, timeZone, online, busy, commands, onEdit, onAction, onFeedback, onDiscard }: TodayPlanProps) {
   const executionStarted = plan.items.some((item) => item.current_state !== 'planned' || Boolean(item.latestEvent))
 
   return (
@@ -73,7 +94,7 @@ function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback 
           <p className="status-label">Published plan</p>
           <strong>Revision {plan.plan.revision}</strong>
         </div>
-        <button type="button" className="secondary-button" onClick={onEdit} disabled={executionStarted}>Edit Today’s Plan</button>
+        <button type="button" className="secondary-button" onClick={onEdit} disabled={executionStarted || !online}>Edit Today’s Plan</button>
       </section>
 
       {plan.plan.brief ? (
@@ -100,6 +121,8 @@ function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback 
               {items.map((item) => {
                 const due = dueLabel(item.task.due_at, timeZone)
                 const summary = executionSummary(item)
+                const itemCommands = commandsForPlanItem(commands, item.id)
+                const conflict = itemCommands.find((command) => command.sync_state === 'conflict')
                 return (
                   <article className={`today-item execution-state-${item.current_state}`} key={item.id}>
                     <div className="today-item-heading">
@@ -107,7 +130,10 @@ function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback 
                         <h3>{item.task.title}</h3>
                         {item.project ? <p>{item.project.title}</p> : null}
                       </div>
-                      {item.current_state !== 'planned' ? <span className="status-chip">{item.current_state}</span> : null}
+                      <div className="sync-chip-row">
+                        {item.current_state !== 'planned' ? <span className="status-chip">{item.current_state}</span> : null}
+                        {conflict ? <span className="sync-badge conflict">Sync issue</span> : itemCommands.length ? <span className="sync-badge pending">Pending Sync</span> : null}
+                      </div>
                     </div>
                     <div className="metadata-row">
                       {item.planned_minutes !== null ? <span>{item.planned_minutes} min planned</span> : null}
@@ -116,11 +142,20 @@ function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback 
                       {item.task.task_kind !== 'normal' ? <span>{item.task.task_kind}</span> : null}
                       {item.current_state === 'partial' && item.task.remaining_minutes !== null ? <span>{item.task.remaining_minutes} min remaining</span> : null}
                     </div>
-                    {summary ? <p className="execution-summary">Latest: {summary}</p> : null}
+                    {summary ? <p className="execution-summary">Latest server event: {summary}</p> : null}
+                    {conflict ? (
+                      <div className="sync-issue-panel" role="alert">
+                        <strong>Sync issue</strong>
+                        <p>{commandDisplayAction(conflict)} at {commandTime(conflict.created_at)} could not sync.</p>
+                        <p>{conflict.last_error ?? 'Server state changed.'}</p>
+                        <button type="button" className="tertiary-button" onClick={() => void onDiscard(conflict.local_id)}>Discard local pending command</button>
+                      </div>
+                    ) : null}
                     <TodayExecutionControls
                       item={item}
                       busy={busy}
                       online={online}
+                      blockedReason={conflict ? 'Resolve the Sync issue before recording another action on this item.' : null}
                       onAction={(action, details) => onAction(item.id, action, details)}
                       onFeedback={(content) => onFeedback(item.id, content)}
                     />
@@ -147,6 +182,8 @@ export function TodayPage({
   online,
   repository,
   executionRepository,
+  offlineRepository,
+  syncNow,
   planningTimeZone,
   now,
   actionClock = () => new Date(),
@@ -154,6 +191,8 @@ export function TodayPage({
 }: TodayPageProps) {
   const queryClient = useQueryClient()
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [queueBusy, setQueueBusy] = useState(false)
+  const [syncBusy, setSyncBusy] = useState(false)
   const [actionMessage, setActionMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
   const timeZone = planningTimeZone ?? resolvePlanningTimeZone()
   const instant = now ?? new Date()
@@ -172,7 +211,18 @@ export function TodayPage({
     return createExecutionRepository(supabase)
   }, [executionRepository])
 
-  const todayQuery = useQuery({
+  const resolvedOfflineRepository = useMemo(() => {
+    if (offlineRepository !== undefined) return offlineRepository
+    return getDefaultOfflineRepository()
+  }, [offlineRepository])
+
+  const { commands } = useOfflineCommands(resolvedOfflineRepository, userId)
+  const todayCommands = useMemo(
+    () => commands.filter((command) => command.plan_date === planDate),
+    [commands, planDate],
+  )
+
+  const serverTodayQuery = useQuery({
     queryKey: todayQueryKeys.plan(userId, planDate),
     queryFn: async (): Promise<ActiveTodayPlan | null> => {
       if (!resolvedRepository) throw new Error('Supabase is not configured.')
@@ -181,7 +231,26 @@ export function TodayPage({
       const items = await resolvedRepository.getPlanItems(plan.id)
       return { plan, items }
     },
+    enabled: online || !resolvedOfflineRepository,
   })
+
+  const offlineSnapshotQuery = useQuery({
+    queryKey: ['offline-today-snapshot', userId, planDate],
+    queryFn: async () => {
+      if (!resolvedOfflineRepository) return null
+      return resolvedOfflineRepository.getTodaySnapshot(userId, planDate)
+    },
+    enabled: !online && Boolean(resolvedOfflineRepository),
+  })
+
+  useEffect(() => {
+    if (!online || !resolvedOfflineRepository || !serverTodayQuery.isSuccess) return
+    if (serverTodayQuery.data) {
+      void resolvedOfflineRepository.saveTodaySnapshot(userId, planDate, serverTodayQuery.data)
+    } else {
+      void resolvedOfflineRepository.clearTodaySnapshot(userId, planDate)
+    }
+  }, [online, planDate, resolvedOfflineRepository, serverTodayQuery.data, serverTodayQuery.isSuccess, userId])
 
   const candidateQuery = useQuery({
     queryKey: todayQueryKeys.candidates(userId, planDate),
@@ -189,8 +258,16 @@ export function TodayPage({
       if (!resolvedRepository) throw new Error('Supabase is not configured.')
       return resolvedRepository.getCandidateTasks()
     },
-    enabled: builderOpen,
+    enabled: builderOpen && (online || !resolvedOfflineRepository),
   })
+
+  const authoritativePlan = online || !resolvedOfflineRepository
+    ? serverTodayQuery.data ?? null
+    : offlineSnapshotQuery.data?.plan ?? null
+  const displayedPlan = useMemo(
+    () => applyOptimisticProjection(authoritativePlan, todayCommands),
+    [authoritativePlan, todayCommands],
+  )
 
   const invalidateExecutionSurfaces = async () => {
     await Promise.all([
@@ -207,7 +284,7 @@ export function TodayPage({
       if (!resolvedRepository) throw new Error('Supabase is not configured.')
       return resolvedRepository.publishPlan({
         planDate,
-        basePlanId: todayQuery.data?.plan.id ?? null,
+        basePlanId: serverTodayQuery.data?.plan.id ?? null,
         items,
       })
     },
@@ -225,42 +302,21 @@ export function TodayPage({
     },
   })
 
-  const executionMutation = useMutation({
-    mutationFn: async ({ itemId, action, details }: { itemId: string; action: TaskAction; details?: ExecutionDetails }) => {
-      if (!online) throw new Error('Connect to the internet to record this action. Nothing was saved offline.')
-      if (!resolvedExecutionRepository) throw new Error('Execution service is unavailable.')
-      const expectedState = todayQuery.data?.items.find((item) => item.id === itemId)?.current_state
-      if (!expectedState) throw new Error('This Today item is no longer available. Refresh Today.')
-      return resolvedExecutionRepository.recordAction({
-        eventId: idFactory(),
-        planItemId: itemId,
-        expectedState,
-        action,
-        occurredAt: actionClock().toISOString(),
-        ...details,
-      })
-    },
-    onSuccess: async () => {
-      setActionMessage({ kind: 'success', text: 'Action recorded.' })
-      await invalidateExecutionSurfaces()
-    },
-  })
-
-  const feedbackMutation = useMutation({
-    mutationFn: async ({ itemId, content }: { itemId: string; content: string }) => {
-      if (!online) throw new Error('Connect to the internet to record this action. Nothing was saved offline.')
-      if (!resolvedExecutionRepository) throw new Error('Feedback service is unavailable.')
-      return resolvedExecutionRepository.addFeedback({
-        feedbackId: idFactory(),
-        planItemId: itemId,
-        content,
-      })
-    },
-    onSuccess: async () => {
-      setActionMessage({ kind: 'success', text: 'Feedback saved.' })
-      await queryClient.invalidateQueries({ queryKey: historyQueryKeys.feedback(userId) })
-    },
-  })
+  const trySync = async (force = false) => {
+    if (!online || !syncNow) return null
+    setSyncBusy(true)
+    try {
+      const result = await syncNow(force)
+      if (result.conflicts > 0) {
+        setActionMessage({ kind: 'error', text: 'One or more local actions have a Sync issue. Review them before continuing.' })
+      } else if (result.acknowledged > 0) {
+        setActionMessage({ kind: 'success', text: `${result.acknowledged} pending action${result.acknowledged === 1 ? '' : 's'} synced.` })
+      }
+      return result
+    } finally {
+      setSyncBusy(false)
+    }
+  }
 
   const publish = async (items: PublishPlanItemInput[]) => {
     if (!online) {
@@ -273,18 +329,95 @@ export function TodayPage({
 
   const recordAction = async (itemId: string, action: TaskAction, details?: ExecutionDetails) => {
     setActionMessage(null)
-    await executionMutation.mutateAsync({ itemId, action, details })
+    const expectedState = displayedPlan?.items.find((item) => item.id === itemId)?.current_state
+    if (!expectedState) throw new Error('This Today item is no longer available. Refresh Today.')
+
+    if (resolvedOfflineRepository) {
+      const occurredAt = actionClock().toISOString()
+      const eventId = idFactory()
+      setQueueBusy(true)
+      try {
+        await resolvedOfflineRepository.enqueueExecution({
+          localId: `execution:${eventId}`,
+          userId,
+          planDate,
+          eventId,
+          planItemId: itemId,
+          expectedState,
+          action,
+          occurredAt,
+          createdAt: occurredAt,
+          ...details,
+        })
+        setActionMessage({ kind: 'success', text: online ? 'Action saved. Syncing…' : 'Action saved on this device. Pending Sync.' })
+      } finally {
+        setQueueBusy(false)
+      }
+      if (online) await trySync(false)
+      return
+    }
+
+    if (!online) throw new Error('Connect to the internet to record this action. Nothing was saved offline.')
+    if (!resolvedExecutionRepository) throw new Error('Execution service is unavailable.')
+    await resolvedExecutionRepository.recordAction({
+      eventId: idFactory(),
+      planItemId: itemId,
+      expectedState,
+      action,
+      occurredAt: actionClock().toISOString(),
+      ...details,
+    })
+    setActionMessage({ kind: 'success', text: 'Action recorded.' })
+    await invalidateExecutionSurfaces()
   }
 
   const addFeedback = async (itemId: string, content: string) => {
     setActionMessage(null)
-    await feedbackMutation.mutateAsync({ itemId, content })
+    if (resolvedOfflineRepository) {
+      const createdAt = actionClock().toISOString()
+      const feedbackId = idFactory()
+      setQueueBusy(true)
+      try {
+        await resolvedOfflineRepository.enqueueFeedback({
+          localId: `feedback:${feedbackId}`,
+          userId,
+          planDate,
+          feedbackId,
+          planItemId: itemId,
+          content,
+          createdAt,
+        })
+        setActionMessage({ kind: 'success', text: online ? 'Feedback saved. Syncing…' : 'Feedback saved on this device. Pending Sync.' })
+      } finally {
+        setQueueBusy(false)
+      }
+      if (online) await trySync(false)
+      return
+    }
+
+    if (!online) throw new Error('Connect to the internet to record this action. Nothing was saved offline.')
+    if (!resolvedExecutionRepository) throw new Error('Feedback service is unavailable.')
+    await resolvedExecutionRepository.addFeedback({ feedbackId: idFactory(), planItemId: itemId, content })
+    setActionMessage({ kind: 'success', text: 'Feedback saved.' })
+    await queryClient.invalidateQueries({ queryKey: historyQueryKeys.feedback(userId) })
+  }
+
+  const discardCommand = async (localId: string) => {
+    if (!resolvedOfflineRepository) return
+    await resolvedOfflineRepository.deleteCommand(localId)
+    setActionMessage({ kind: 'success', text: 'Local pending command discarded. Server state was not changed.' })
+    if (online) await serverTodayQuery.refetch()
   }
 
   const openBuilder = () => {
     setActionMessage(null)
     setBuilderOpen(true)
   }
+
+  const loading = online || !resolvedOfflineRepository ? serverTodayQuery.isPending : offlineSnapshotQuery.isPending
+  const loadError = online || !resolvedOfflineRepository ? serverTodayQuery.isError : offlineSnapshotQuery.isError
+  const loaded = online || !resolvedOfflineRepository ? serverTodayQuery.isSuccess : offlineSnapshotQuery.isSuccess
+  const hasOfflineSnapshot = Boolean(offlineSnapshotQuery.data)
 
   return (
     <section className="page-stack today-page" aria-labelledby="today-title">
@@ -295,24 +428,45 @@ export function TodayPage({
       </header>
 
       {!online ? (
-        <p className="offline-note" role="status">App shell remains available offline. Recording actions or publishing a plan requires a connection.</p>
+        <p className="offline-note" role="status">Offline mode. Today uses the last local snapshot when available; execution and feedback are stored as Pending Sync.</p>
+      ) : null}
+
+      {!online && hasOfflineSnapshot ? (
+        <p className="offline-snapshot-label" role="status">Offline snapshot · saved {commandTime(offlineSnapshotQuery.data!.saved_at)}</p>
+      ) : null}
+
+      {todayCommands.length > 0 && syncNow ? (
+        <section className="sync-summary-card" aria-label="Offline sync status">
+          <div>
+            <strong>{todayCommands.length} local command{todayCommands.length === 1 ? '' : 's'}</strong>
+            <p>{todayCommands.some((command) => command.sync_state === 'conflict') ? 'Sync issue needs attention.' : 'Pending Sync'}</p>
+          </div>
+          <button type="button" className="secondary-button" disabled={!online || syncBusy} onClick={() => void trySync(true)}>Sync Now</button>
+        </section>
       ) : null}
 
       {actionMessage ? <p className={`action-message ${actionMessage.kind}`} role={actionMessage.kind === 'error' ? 'alert' : 'status'}>{actionMessage.text}</p> : null}
 
-      {todayQuery.isPending ? (
+      {loading ? (
         <section className="today-loading" aria-live="polite"><strong>Loading today’s plan…</strong></section>
       ) : null}
 
-      {todayQuery.isError ? (
+      {loadError ? (
         <section className="empty-state" role="alert">
           <strong>Today’s plan is unavailable.</strong>
-          <p>{readableError(todayQuery.error)}</p>
-          <button type="button" className="secondary-button" onClick={() => void todayQuery.refetch()}>Try Again</button>
+          <p>{online ? readableError(serverTodayQuery.error) : 'The offline snapshot could not be read from this device.'}</p>
+          {online ? <button type="button" className="secondary-button" onClick={() => void serverTodayQuery.refetch()}>Try Again</button> : null}
         </section>
       ) : null}
 
-      {todayQuery.isSuccess && !todayQuery.data && !builderOpen ? (
+      {!online && resolvedOfflineRepository && loaded && !authoritativePlan && !builderOpen ? (
+        <section className="empty-state">
+          <strong>No offline Today plan is available.</strong>
+          <p>Connect once to load today’s published plan before using execution actions offline.</p>
+        </section>
+      ) : null}
+
+      {(online || !resolvedOfflineRepository) && serverTodayQuery.isSuccess && !serverTodayQuery.data && !builderOpen ? (
         <section className="empty-state">
           <strong>No plan published for today.</strong>
           <p>Build a manual plan from your active Task definitions.</p>
@@ -320,21 +474,23 @@ export function TodayPage({
         </section>
       ) : null}
 
-      {todayQuery.isSuccess && todayQuery.data && !builderOpen ? (
+      {loaded && displayedPlan && !builderOpen ? (
         <TodayPlan
-          plan={todayQuery.data}
+          plan={displayedPlan}
           timeZone={timeZone}
           online={online}
-          busy={executionMutation.isPending || feedbackMutation.isPending}
+          busy={queueBusy || syncBusy}
+          commands={todayCommands}
           onEdit={openBuilder}
           onAction={recordAction}
           onFeedback={addFeedback}
+          onDiscard={discardCommand}
         />
       ) : null}
 
       {builderOpen ? (
         <DailyPlanBuilder
-          currentPlan={todayQuery.data ?? null}
+          currentPlan={displayedPlan}
           candidates={(candidateQuery.data ?? []).filter((task) => task.status === 'active')}
           loadingCandidates={candidateQuery.isPending}
           candidateError={candidateQuery.isError ? 'Active tasks could not be loaded.' : null}

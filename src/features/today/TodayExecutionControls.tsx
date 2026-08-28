@@ -14,6 +14,7 @@ interface TodayExecutionControlsProps {
   item: TodayPlanItem
   busy: boolean
   online: boolean
+  blockedReason?: string | null
   onAction: (action: TaskAction, details?: ExecutionDetails) => Promise<void>
   onFeedback: (content: string) => Promise<void>
 }
@@ -24,6 +25,7 @@ export function TodayExecutionControls({
   item,
   busy,
   online,
+  blockedReason = null,
   onAction,
   onFeedback,
 }: TodayExecutionControlsProps) {
@@ -40,6 +42,7 @@ export function TodayExecutionControls({
   const isDone = state === 'done'
   const isTerminal = terminalStates.has(state)
   const canDone = ['planned', 'started', 'partial', 'blocked'].includes(state)
+  const disabled = busy || Boolean(blockedReason)
 
   const run = async (action: TaskAction, details?: ExecutionDetails) => {
     setMessage(null)
@@ -111,7 +114,7 @@ export function TodayExecutionControls({
             <input
               type="checkbox"
               checked={isDone}
-              disabled={busy || isDone || !canDone}
+              disabled={disabled || isDone || !canDone}
               onChange={() => void run('done')}
               aria-label={`Mark ${item.task.title} done`}
             />
@@ -130,7 +133,7 @@ export function TodayExecutionControls({
             setDetailMode(null)
             setMessage(null)
           }}
-          disabled={busy}
+          disabled={disabled}
         >
           Actions
         </button>
@@ -139,20 +142,20 @@ export function TodayExecutionControls({
       {menuOpen ? (
         <div className="execution-action-panel">
           <div className="execution-action-grid">
-            {state === 'planned' ? <button type="button" onClick={() => void run('started')} disabled={busy}>Start</button> : null}
+            {state === 'planned' ? <button type="button" onClick={() => void run('started')} disabled={disabled}>Start</button> : null}
             {['planned', 'started', 'partial'].includes(state) ? (
-              <button type="button" onClick={() => setDetailMode('partial')} disabled={busy}>Partial</button>
+              <button type="button" onClick={() => setDetailMode('partial')} disabled={disabled}>Partial</button>
             ) : null}
-            {['planned', 'started'].includes(state) ? <button type="button" onClick={() => void run('skipped')} disabled={busy}>Skip Today</button> : null}
-            {['planned', 'started', 'partial', 'blocked'].includes(state) ? <button type="button" onClick={() => void run('deferred')} disabled={busy}>Defer</button> : null}
-            {['planned', 'started', 'partial'].includes(state) ? <button type="button" onClick={() => void run('blocked')} disabled={busy}>Blocked</button> : null}
-            {['planned', 'started', 'partial', 'blocked'].includes(state) ? <button type="button" onClick={() => void run('cancelled')} disabled={busy}>Cancel</button> : null}
-            {(isTerminal || state === 'blocked') ? <button type="button" onClick={() => void run('reopened')} disabled={busy}>Reopen</button> : null}
-            <button type="button" onClick={() => setDetailMode('feedback')} disabled={busy}>Add Feedback</button>
+            {['planned', 'started'].includes(state) ? <button type="button" onClick={() => void run('skipped')} disabled={disabled}>Skip Today</button> : null}
+            {['planned', 'started', 'partial', 'blocked'].includes(state) ? <button type="button" onClick={() => void run('deferred')} disabled={disabled}>Defer</button> : null}
+            {['planned', 'started', 'partial'].includes(state) ? <button type="button" onClick={() => void run('blocked')} disabled={disabled}>Blocked</button> : null}
+            {['planned', 'started', 'partial', 'blocked'].includes(state) ? <button type="button" onClick={() => void run('cancelled')} disabled={disabled}>Cancel</button> : null}
+            {(isTerminal || state === 'blocked') ? <button type="button" onClick={() => void run('reopened')} disabled={disabled}>Reopen</button> : null}
+            <button type="button" onClick={() => setDetailMode('feedback')} disabled={disabled}>Add Feedback</button>
           </div>
 
           {detailMode === 'partial' ? (
-            <fieldset className="execution-detail-form" disabled={busy}>
+            <fieldset className="execution-detail-form" disabled={disabled}>
               <legend>Record partial progress</legend>
               <label>
                 <span>Progress %</span>
@@ -175,7 +178,7 @@ export function TodayExecutionControls({
           ) : null}
 
           {detailMode === 'feedback' ? (
-            <fieldset className="execution-detail-form" disabled={busy}>
+            <fieldset className="execution-detail-form" disabled={disabled}>
               <legend>Add feedback</legend>
               <label className="execution-detail-wide">
                 <span>What should TaskRing remember?</span>
@@ -187,7 +190,8 @@ export function TodayExecutionControls({
         </div>
       ) : null}
 
-      {!online ? <p className="execution-offline-hint">Connect to record actions.</p> : null}
+      {!online ? <p className="execution-offline-hint">Offline: actions are saved on this device as Pending Sync.</p> : null}
+      {blockedReason ? <p className="action-message error" role="alert">{blockedReason}</p> : null}
       {message ? <p className="action-message error" role="alert">{message}</p> : null}
     </div>
   )
