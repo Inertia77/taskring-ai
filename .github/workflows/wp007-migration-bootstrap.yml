@@ -1,0 +1,209 @@
+name: WP007 Migration Bootstrap
+
+on:
+  push:
+    branches:
+      - feature/wp007-execution-events-feedback
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Align historical tests with the new command boundary
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('supabase/tests/execution_commands.test.sql')
+          s = p.read_text()
+          s = s.replace('select plan(43);', 'select plan(52);')
+          s = s.replace(
+              "public.record_task_action_v01(uuid,uuid,text,timestamptz,numeric,integer,integer,text,text)",
+              "public.record_task_action_v01(uuid,uuid,text,text,timestamptz,numeric,integer,integer,text,text)",
+          )
+          replacements = [
+              ("current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','2026-08-28T09:00:00Z'", "current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'planned','done','2026-08-28T09:00:00Z'"),
+              ("current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','2026-08-28T10:00:00Z'", "current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'planned','done','2026-08-28T10:00:00Z'"),
+              ("current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'reopened',now()", "current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','reopened',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'partial',now(),50", "gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'done','partial',now(),50"),
+              ("gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'reopened',now()", "gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'done','reopened',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'blocked',now()", "gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'started','blocked',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial',now(),40", "gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'planned','partial',now(),40"),
+              ("gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial',now(),100", "gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial','partial',now(),100"),
+              ("gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'skipped',now()", "gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'planned','skipped',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a4')::uuid,'deferred',now()", "gen_random_uuid(),current_setting('wp007.item_a4')::uuid,'planned','deferred',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a5')::uuid,'cancelled',now()", "gen_random_uuid(),current_setting('wp007.item_a5')::uuid,'planned','cancelled',now()"),
+              ("gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'reopened',now()", "gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'skipped','reopened',now()"),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f'missing execution test patch: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('supabase/tests/daily_plan_publication.test.sql')
+          s = p.read_text()
+          old = """update public.daily_plan_items
+          set current_state='started'
+          where plan_id=current_setting('wp006.plan2')::uuid
+            and task_id=current_setting('wp006.task_a1')::uuid;
+          """
+          new = """select set_config(
+            'wp006.execution_event',
+            (select event_id::text from public.record_task_action_v01(
+              gen_random_uuid(),
+              (select id from public.daily_plan_items where plan_id=current_setting('wp006.plan2')::uuid and task_id=current_setting('wp006.task_a1')::uuid),
+              'planned',
+              'started',
+              now(),null,null,null,null,null
+            )),
+            true
+          );
+          """
+          if old not in s:
+              raise SystemExit('missing WP006 pgTAP execution setup block')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tests/authDataApi.integration.test.ts')
+          s = p.read_text()
+          old = 'expect(eventInsertError).toBeNull()'
+          if old not in s:
+              raise SystemExit('missing Auth/Data API direct event expectation')
+          p.write_text(s.replace(old, 'expect(eventInsertError).not.toBeNull()', 1))
+
+          p = Path('tests/dailyPlanRpc.integration.test.ts')
+          s = p.read_text()
+          old = """    const { error: stateUpdateError } = await userAClient
+                .from('daily_plan_items')
+                .update({ current_state: 'started' })
+                .eq('plan_id', second.planId)
+                .eq('task_id', taskA1!.id)
+              expect(stateUpdateError).toBeNull()
+          """
+          new = """    const { data: executionItem, error: executionItemError } = await userAClient
+                .from('daily_plan_items')
+                .select('id,current_state')
+                .eq('plan_id', second.planId)
+                .eq('task_id', taskA1!.id)
+                .single()
+              expect(executionItemError).toBeNull()
+              const { error: directStateUpdateError } = await userAClient
+                .from('daily_plan_items')
+                .update({ current_state: 'started' })
+                .eq('id', executionItem!.id)
+              expect(directStateUpdateError).not.toBeNull()
+              const { error: startExecutionError } = await userAClient.rpc('record_task_action_v01', {
+                p_event_id: crypto.randomUUID(),
+                p_plan_item_id: executionItem!.id,
+                p_expected_state: 'planned',
+                p_action: 'started',
+              })
+              expect(startExecutionError).toBeNull()
+          """
+          if old not in s:
+              raise SystemExit('missing WP006 integration execution setup block')
+          p.write_text(s.replace(old, new, 1))
+
+          p = Path('tests/todayPage.test.tsx')
+          s = p.read_text()
+          s = s.replace("expect(screen.queryByRole('checkbox')).toBeNull()", "expect(screen.queryByRole('checkbox')).toBeTruthy()", 1)
+          s = s.replace(
+              "expect(await screen.findByText('Execution has started; replanning is not supported by this stage.')).toBeTruthy()",
+              "expect(await screen.findByText(/Execution has started\. Plan history is locked/)).toBeTruthy()",
+              1,
+          )
+          p.write_text(s)
+          PY
+
+      - name: Generate formal Supabase migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec supabase migration new execution_events_feedback_v01
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_execution_events_feedback_v01.sql' -print | sort | tail -1)"
+          test -n "$migration_file"
+          cat supabase/wp007_execution_events_feedback_v01.sql.source supabase/wp007_execution_events_feedback_v01.patch.sql.source > "$migration_file"
+          echo "MIGRATION_FILE=$migration_file" >> "$GITHUB_ENV"
+          echo "Generated $migration_file"
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Rebuild and run database tests
+        run: |
+          pnpm exec supabase db reset --local
+          pnpm exec supabase test db
+          pnpm exec supabase db lint --level error --schema public
+
+      - name: Run real Auth, Data API, Daily Plan, and Execution integrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_file="$(mktemp)"
+          pnpm exec supabase status -o env > "$env_file"
+          api_url="$(sed -n 's/^API_URL="\([^"]*\)"$/\1/p' "$env_file")"
+          publishable_key="$(sed -n 's/^PUBLISHABLE_KEY="\([^"]*\)"$/\1/p' "$env_file")"
+          if [ -z "$publishable_key" ]; then
+            publishable_key="$(sed -n 's/^ANON_KEY="\([^"]*\)"$/\1/p' "$env_file")"
+          fi
+          rm -f "$env_file"
+          test -n "$api_url"
+          test -n "$publishable_key"
+          VITE_SUPABASE_URL="$api_url" VITE_SUPABASE_PUBLISHABLE_KEY="$publishable_key" \
+            pnpm exec vitest run tests/authDataApi.integration.test.ts tests/dailyPlanRpc.integration.test.ts tests/executionRpc.integration.test.ts
+
+      - name: Generate database types from local schema
+        run: pnpm exec supabase gen types typescript --local > src/types/database.types.ts
+
+      - name: Stop local Supabase before frontend verification
+        run: |
+          pnpm exec supabase stop --no-backup
+          rm -rf supabase/.temp
+
+      - name: Verify frontend and PWA with generated types
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+          pnpm test:pwa
+
+      - name: Cleanup local Supabase after failure
+        if: failure()
+        run: |
+          pnpm exec supabase stop --no-backup || true
+          rm -rf supabase/.temp
+
+      - name: Commit verified migration and generated types, then self-delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f supabase/wp007_execution_events_feedback_v01.sql.source
+          rm -f supabase/wp007_execution_events_feedback_v01.patch.sql.source
+          rm -f .github/workflows/wp007-migration-bootstrap.yml
+          git add supabase/migrations src/types/database.types.ts supabase/tests tests supabase/wp007_execution_events_feedback_v01.sql.source supabase/wp007_execution_events_feedback_v01.patch.sql.source .github/workflows/wp007-migration-bootstrap.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'WP007: generate verified execution boundary migration and types'
+          git push origin HEAD:feature/wp007-execution-events-feedback
