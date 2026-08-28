@@ -157,16 +157,16 @@ begin
     end if;
   end loop;
 
-  select pg_catalog.coalesce(pg_catalog.max(dp.revision), 0) + 1
+  select coalesce(pg_catalog.max(dp.revision), 0) + 1
   into v_next_revision
   from public.daily_plans as dp
   where dp.user_id = v_user_id
     and dp.plan_date = p_plan_date;
 
   if v_has_current then
-    v_capacity_minutes := pg_catalog.coalesce(p_capacity_minutes, v_current.capacity_minutes);
-    v_capacity_breakdown := pg_catalog.coalesce(p_capacity_breakdown, v_current.capacity_breakdown);
-    v_brief := pg_catalog.coalesce(p_brief, v_current.brief);
+    v_capacity_minutes := coalesce(p_capacity_minutes, v_current.capacity_minutes);
+    v_capacity_breakdown := coalesce(p_capacity_breakdown, v_current.capacity_breakdown);
+    v_brief := coalesce(p_brief, v_current.brief);
 
     update public.daily_plans
     set status = 'superseded'
@@ -174,7 +174,7 @@ begin
       and user_id = v_user_id;
   else
     v_capacity_minutes := p_capacity_minutes;
-    v_capacity_breakdown := pg_catalog.coalesce(p_capacity_breakdown, '{}'::jsonb);
+    v_capacity_breakdown := coalesce(p_capacity_breakdown, '{}'::jsonb);
     v_brief := p_brief;
   end if;
 
