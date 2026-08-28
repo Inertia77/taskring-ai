@@ -1,1 +1,3 @@
-TaskRing AI Secretary bootstrap repository.
+# TaskRing AI Secretary
+
+Bootstrap repository for the TaskRing AI Secretary project.
