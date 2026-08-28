@@ -623,6 +623,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_plan_item_feedback_v01: {
+        Args: {
+          p_content: string
+          p_feedback_id: string
+          p_plan_item_id: string
+        }
+        Returns: {
+          feedback_id: string
+        }[]
+      }
       publish_daily_plan_v01: {
         Args: {
           p_base_plan_id?: string
@@ -635,6 +645,23 @@ export type Database = {
         Returns: {
           plan_id: string
           revision: number
+        }[]
+      }
+      record_task_action_v01: {
+        Args: {
+          p_action: string
+          p_actual_minutes?: number
+          p_event_id: string
+          p_expected_state: string
+          p_note?: string
+          p_occurred_at?: string
+          p_plan_item_id: string
+          p_progress_percent?: number
+          p_reason?: string
+          p_remaining_minutes?: number
+        }
+        Returns: {
+          event_id: string
         }[]
       }
     }
