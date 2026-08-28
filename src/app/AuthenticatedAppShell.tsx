@@ -9,7 +9,7 @@ import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
 import { TodayPage } from '../features/today/TodayPage'
-import { managementQueryKeys } from '../data/queryKeys'
+import { managementQueryKeys, todayQueryKeys } from '../data/queryKeys'
 import { resolveAppRoute, useAppRouter, type AppRoutePath } from './router'
 
 interface AppShellViewProps {
@@ -36,7 +36,7 @@ export function AuthenticatedAppShellView({
   const route = resolveAppRoute(pathname)
 
   const page = {
-    today: <TodayPage online={online} supabaseHealth={supabaseHealth} />,
+    today: <TodayPage userId={userId} online={online} />,
     inbox: <InboxPage />,
     tasks: <TasksPage userId={userId} online={online} />,
     history: <HistoryPage />,
@@ -95,6 +95,7 @@ export function AuthenticatedAppShell({
   useEffect(() => {
     return () => {
       queryClient.removeQueries({ queryKey: managementQueryKeys.root(userId) })
+      queryClient.removeQueries({ queryKey: todayQueryKeys.root(userId) })
     }
   }, [queryClient, userId])
 
