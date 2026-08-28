@@ -18,13 +18,14 @@ select results_eq(
 );
 
 select results_eq(
-  $$select coalesce(array_to_string(p.proconfig, ','),'') like '%search_path=%' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='publish_daily_plan_v01'$$,
+  $$select coalesce(array_to_string(p.proconfig, ','),'') = 'search_path=""' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='publish_daily_plan_v01'$$,
   $$values (true)$$,
-  'publish function pins search_path'
+  'publish function pins an empty search_path'
 );
 
-select ok(
-  not has_function_privilege('public', 'public.publish_daily_plan_v01(date,uuid,jsonb,integer,jsonb,text)', 'EXECUTE'),
+select results_eq(
+  $$select count(*)::bigint from pg_proc p join pg_namespace n on n.oid=p.pronamespace cross join lateral aclexplode(coalesce(p.proacl, acldefault('f',p.proowner))) a where n.nspname='public' and p.proname='publish_daily_plan_v01' and a.grantee=0 and a.privilege_type='EXECUTE'$$,
+  $$values (0::bigint)$$,
   'PUBLIC execute denied'
 );
 select ok(
