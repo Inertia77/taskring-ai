@@ -1,0 +1,44 @@
+name: WP008 Test Correction
+
+on:
+  push:
+    branches:
+      - feature/wp008-offline-action-outbox
+
+permissions:
+  contents: write
+
+jobs:
+  correct-and-self-delete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/wp008-offline-action-outbox
+          fetch-depth: 0
+
+      - name: Correct server event assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/offlineOutbox.test.tsx')
+          text = path.read_text()
+          old = "expect(screen.getAllByText('Done')).toHaveLength(1)"
+          new = "expect(screen.getAllByText('done')).toHaveLength(1)"
+          if text.count(old) != 1:
+              raise SystemExit('Expected exactly one stale Done assertion')
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Commit correction and remove workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/wp008-test-correction.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/offlineOutbox.test.tsx .github/workflows/wp008-test-correction.yml
+          git commit -m "WP008: align History server-event assertion"
+          git push origin HEAD:feature/wp008-offline-action-outbox

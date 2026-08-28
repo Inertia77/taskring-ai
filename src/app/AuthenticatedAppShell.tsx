@@ -13,7 +13,9 @@ import { createDailyPlanRepository } from '../data/dailyPlans/dailyPlanRepositor
 import { createExecutionRepository } from '../data/execution/executionRepository'
 import { EMPTY_SYNC_SUMMARY, type OfflineCommand, type SyncSummary } from '../data/offline/models'
 import { getDefaultOfflineRepository, type OfflineRepository } from '../data/offline/offlineRepository'
+import { createOfflineServerReconciliationRepository } from '../data/offline/reconciliationRepository'
 import { createOutboxSyncEngine, type OutboxSyncEngine } from '../data/offline/syncEngine'
+import { useOutboxAutoSync } from '../data/offline/useOutboxAutoSync'
 import { historyQueryKeys, managementQueryKeys, todayQueryKeys } from '../data/queryKeys'
 import { supabase } from '../lib/supabaseClient'
 import { resolveAppRoute, useAppRouter, type AppRoutePath } from './router'
@@ -113,9 +115,19 @@ export function AuthenticatedAppShell({
     if (!supabase) return null
     return createExecutionRepository(supabase)
   }, [])
+  const serverReconciliationRepository = useMemo(() => {
+    if (!supabase) return null
+    return createOfflineServerReconciliationRepository(supabase, userId)
+  }, [userId])
 
   const reconcile = useCallback(async (command: OfflineCommand) => {
-    if (!offlineRepository || !dailyPlanRepository) throw new Error('Authoritative reconciliation is unavailable.')
+    if (!offlineRepository || !dailyPlanRepository || !serverReconciliationRepository) {
+      throw new Error('Authoritative reconciliation is unavailable.')
+    }
+
+    // Verify that the immutable server Event/Feedback row exists before local ack removal.
+    await serverReconciliationRepository.assertAcknowledged(command)
+
     const plan = await dailyPlanRepository.getActivePlan(command.plan_date)
     if (plan) {
       const items = await dailyPlanRepository.getPlanItems(plan.id)
@@ -123,6 +135,8 @@ export function AuthenticatedAppShell({
     } else {
       await offlineRepository.clearTodaySnapshot(userId, command.plan_date)
     }
+
+    // Invalidate and await active server reads before the outbox command is removed.
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: todayQueryKeys.plan(userId, command.plan_date) }),
       queryClient.invalidateQueries({ queryKey: todayQueryKeys.candidates(userId, command.plan_date) }),
@@ -130,7 +144,7 @@ export function AuthenticatedAppShell({
       queryClient.invalidateQueries({ queryKey: historyQueryKeys.events(userId) }),
       queryClient.invalidateQueries({ queryKey: historyQueryKeys.feedback(userId) }),
     ])
-  }, [dailyPlanRepository, offlineRepository, queryClient, userId])
+  }, [dailyPlanRepository, offlineRepository, queryClient, serverReconciliationRepository, userId])
 
   const syncEngine: OutboxSyncEngine | null = useMemo(() => {
     if (!offlineRepository || !executionRepository) return null
@@ -147,10 +161,8 @@ export function AuthenticatedAppShell({
     return syncEngine.syncNow(force)
   }, [syncEngine])
 
-  useEffect(() => {
-    if (!online || !syncEngine) return
-    void syncEngine.syncNow(false)
-  }, [online, syncEngine])
+  // Covers authenticated startup and every browser offline -> online transition.
+  useOutboxAutoSync(online, syncEngine)
 
   useEffect(() => {
     return () => {

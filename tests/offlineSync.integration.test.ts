@@ -5,6 +5,7 @@ import { createDailyPlanRepository } from '../src/data/dailyPlans/dailyPlanRepos
 import { createExecutionRepository, type ExecutionRepository } from '../src/data/execution/executionRepository'
 import { ExecutionCommandError } from '../src/data/execution/models'
 import { createOfflineRepository } from '../src/data/offline/offlineRepository'
+import { createOfflineServerReconciliationRepository } from '../src/data/offline/reconciliationRepository'
 import { createOutboxSyncEngine } from '../src/data/offline/syncEngine'
 import type { Database } from '../src/types/database.types'
 
@@ -84,7 +85,9 @@ describe.skipIf(!hasLocalAuth)('real local IndexedDB outbox -> WP007 RPC -> reco
       addFeedback: (input) => realExecution.addFeedback(input),
     }
 
-    const reconcile = async () => {
+    const serverReadback = createOfflineServerReconciliationRepository(client, userId)
+    const reconcile = async (command: Parameters<typeof serverReadback.assertAcknowledged>[0]) => {
+      await serverReadback.assertAcknowledged(command)
       const plan = await daily.getActivePlan('2026-08-28')
       expect(plan).not.toBeNull()
       const items = await daily.getPlanItems(plan!.id)

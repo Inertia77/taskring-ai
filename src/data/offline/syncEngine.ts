@@ -27,7 +27,7 @@ function errorMessage(error: unknown) {
 function isRetryableFailure(error: unknown) {
   if (error instanceof ExecutionCommandError) return error.kind === 'retryable'
   const message = errorMessage(error).toLowerCase()
-  return /network|failed to fetch|fetch failed|timeout|timed out|connection|reset|temporar|502|503|504|gateway/.test(message)
+  return /network|failed to fetch|fetch failed|timeout|timed out|connection|reset|temporar|502|503|504|gateway|\b5\d\d\b/.test(message)
 }
 
 function retryAt(now: Date, attemptCount: number) {
@@ -76,23 +76,13 @@ export function createOutboxSyncEngine({
   const drain = async (force: boolean): Promise<SyncSummary> => {
     const summary = { ...EMPTY_SYNC_SUMMARY }
     const commands = await repository.listUserCommands(userId)
-    const conflictedItems = new Set(
-      commands.filter((command) => command.sync_state === 'conflict').map((command) => command.plan_item_id),
-    )
 
     for (const command of commands) {
       if (command.user_id !== userId) continue
 
-      if (command.sync_state === 'conflict') continue
-
-      if (conflictedItems.has(command.plan_item_id)) {
-        await repository.markConflict(
-          command.local_id,
-          'Blocked by an earlier sync conflict on this Today item. Discard or resolve the earlier command first.',
-        )
-        summary.conflicts += 1
-        continue
-      }
+      // v0.1 favors correctness over throughput: a durable conflict is the FIFO head
+      // until the user explicitly resolves or discards it.
+      if (command.sync_state === 'conflict') break
 
       const now = clock()
       if (!force && command.next_attempt_at && Date.parse(command.next_attempt_at) > now.getTime()) {
@@ -116,12 +106,13 @@ export function createOutboxSyncEngine({
         }
 
         await repository.markConflict(command.local_id, errorMessage(error))
-        conflictedItems.add(command.plan_item_id)
         summary.conflicts += 1
-        continue
+        break
       }
 
       try {
+        // Server acknowledgement alone is not sufficient. Authoritative readback and
+        // local snapshot/query reconciliation must succeed before deletion.
         await reconcile(command)
       } catch (error) {
         await repository.markRetry(
