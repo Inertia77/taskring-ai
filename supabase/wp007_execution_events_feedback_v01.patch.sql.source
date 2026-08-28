@@ -82,6 +82,7 @@ declare
   v_occurred_at timestamptz := coalesce(p_occurred_at, pg_catalog.clock_timestamp());
   v_reason text := nullif(pg_catalog.btrim(p_reason), '');
   v_note text := nullif(pg_catalog.btrim(p_note), '');
+  v_previous_context text := pg_catalog.current_setting('taskring.command_context', true);
 begin
   if v_user_id is null then raise exception using errcode='42501', message='Authentication required.'; end if;
   if p_event_id is null or p_plan_item_id is null then raise exception using errcode='P0001', message='Event ID and Plan Item are required.'; end if;
@@ -177,6 +178,7 @@ begin
     update public.tasks set status='active',completed_at=null where id=v_task.id and user_id=v_user_id;
   end if;
 
+  perform pg_catalog.set_config('taskring.command_context', coalesce(v_previous_context, ''), true);
   return query select p_event_id;
 end;
 $$;
@@ -201,6 +203,7 @@ declare
   v_item public.daily_plan_items%rowtype;
   v_existing public.user_feedback%rowtype;
   v_content text := pg_catalog.btrim(coalesce(p_content,''));
+  v_previous_context text := pg_catalog.current_setting('taskring.command_context', true);
 begin
   if v_user_id is null then raise exception using errcode='42501', message='Authentication required.'; end if;
   if p_feedback_id is null or p_plan_item_id is null then raise exception using errcode='P0001', message='Feedback ID and Plan Item are required.'; end if;
@@ -226,6 +229,7 @@ begin
   perform pg_catalog.set_config('taskring.command_context','feedback:v1',true);
   insert into public.user_feedback(id,user_id,task_id,plan_id,plan_item_id,content,source,ai_interpretation)
   values(p_feedback_id,v_user_id,v_item.task_id,v_item.plan_id,v_item.id,v_content,'frontend',null);
+  perform pg_catalog.set_config('taskring.command_context', coalesce(v_previous_context, ''), true);
   return query select p_feedback_id;
 end;
 $$;

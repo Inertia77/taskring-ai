@@ -172,12 +172,25 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> RPC -> Data API -> Daily Plan
     expect(eventCountError).toBeNull()
     expect(plannedEventCount).toBe(0)
 
-    const { error: stateUpdateError } = await userAClient
+    const { data: executionItem, error: executionItemError } = await userAClient
       .from('daily_plan_items')
-      .update({ current_state: 'started' })
+      .select('id,current_state')
       .eq('plan_id', second.planId)
       .eq('task_id', taskA1!.id)
-    expect(stateUpdateError).toBeNull()
+      .single()
+    expect(executionItemError).toBeNull()
+    const { error: directStateUpdateError } = await userAClient
+      .from('daily_plan_items')
+      .update({ current_state: 'started' })
+      .eq('id', executionItem!.id)
+    expect(directStateUpdateError).not.toBeNull()
+    const { error: startExecutionError } = await userAClient.rpc('record_task_action_v01', {
+      p_event_id: crypto.randomUUID(),
+      p_plan_item_id: executionItem!.id,
+      p_expected_state: 'planned',
+      p_action: 'started',
+    })
+    expect(startExecutionError).toBeNull()
 
     await expect(repositoryA.publishPlan({ planDate, basePlanId: second.planId, items: [] })).rejects.toThrow(/Execution has started/)
     const activeAfterExecutionGuard = await repositoryA.getActivePlan(planDate)

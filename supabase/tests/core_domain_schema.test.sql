@@ -87,22 +87,31 @@ insert into public.tasks (id,user_id,project_id,title,status,task_kind,execution
   (current_setting('wp003.task_b')::uuid,current_setting('wp003.user_b')::uuid,current_setting('wp003.project_b')::uuid,'Task B','active','normal','deep','user'),
   (current_setting('wp003.task_c')::uuid,current_setting('wp003.user_c')::uuid,current_setting('wp003.project_c')::uuid,'Task C','active','normal','any','user');
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 insert into public.daily_plans (id,user_id,plan_date,revision,status,created_by) values
   (current_setting('wp003.plan_a')::uuid,current_setting('wp003.user_a')::uuid,'2026-01-01',1,'active','user'),
   (current_setting('wp003.plan_b')::uuid,current_setting('wp003.user_b')::uuid,'2026-01-01',1,'active','user');
 
 insert into public.daily_plan_items (id,user_id,plan_id,task_id,bucket,position,current_state) values
   (current_setting('wp003.plan_item_a')::uuid,current_setting('wp003.user_a')::uuid,current_setting('wp003.plan_a')::uuid,current_setting('wp003.task_a')::uuid,'must',0,'planned');
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 select throws_ok(
   $$insert into public.daily_plans (user_id,plan_date,revision,status,created_by) values (current_setting('wp003.user_a')::uuid,'2026-01-01',1,'draft','user')$$,
   '23505', null, 'daily plan revision is unique per user/date'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 select throws_ok(
   $$insert into public.daily_plans (user_id,plan_date,revision,status,created_by) values (current_setting('wp003.user_a')::uuid,'2026-01-01',2,'active','user')$$,
   '23505', null, 'only one active daily plan per user/date'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
 select throws_ok(
   $$insert into public.projects (user_id,goal_id,title,status) values (current_setting('wp003.user_b')::uuid,current_setting('wp003.goal_a')::uuid,'Bad','active')$$,
@@ -114,15 +123,21 @@ select throws_ok(
   '23503', null, 'task cannot reference another user project'
 );
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 select throws_ok(
   $$insert into public.daily_plan_items (user_id,plan_id,task_id,bucket,position,current_state) values (current_setting('wp003.user_b')::uuid,current_setting('wp003.plan_b')::uuid,current_setting('wp003.task_a')::uuid,'must',0,'planned')$$,
   '23503', null, 'plan item cannot reference another user task'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'execution:v1', true);
 select throws_ok(
   $$insert into public.task_events (id,user_id,task_id,event_type,occurred_at,progress_percent,actor) values (gen_random_uuid(),current_setting('wp003.user_a')::uuid,current_setting('wp003.task_a')::uuid,'partial',now(),101,'user')$$,
   '23514', null, 'task event progress above 100 is rejected'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
 select throws_ok(
   $$insert into public.tasks (user_id,title,status,task_kind,estimate_minutes,execution_context,created_by) values (current_setting('wp003.user_a')::uuid,'Negative','active','normal',-1,'any','user')$$,
@@ -134,10 +149,13 @@ select throws_ok(
   '23514', null, 'negative task remaining minutes are rejected'
 );
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 select throws_ok(
   $$insert into public.daily_plan_items (user_id,plan_id,task_id,bucket,position,planned_minutes,current_state) values (current_setting('wp003.user_a')::uuid,current_setting('wp003.plan_a')::uuid,current_setting('wp003.task_a')::uuid,'must',2,-1,'planned')$$,
   '23514', null, 'negative planned minutes are rejected'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
 select throws_ok(
   $$insert into public.source_links (user_id,source_type) values (current_setting('wp003.user_a')::uuid,'manual')$$,
@@ -170,15 +188,21 @@ select throws_ok(
   '23514', null, 'inbox confidence is bounded'
 );
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'publication:v1', true);
 select throws_ok(
   $$insert into public.daily_plans (user_id,plan_date,revision,status,created_by) values (current_setting('wp003.user_a')::uuid,'2026-01-02',0,'draft','user')$$,
   '23514', null, 'daily plan revision starts at one'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
+select set_config('wp007.schema_previous_context', coalesce(current_setting('taskring.command_context', true), ''), true);
+select set_config('taskring.command_context', 'execution:v1', true);
 select throws_ok(
   $$insert into public.task_events (id,user_id,task_id,event_type,occurred_at,actual_minutes,actor) values (gen_random_uuid(),current_setting('wp003.user_a')::uuid,current_setting('wp003.task_a')::uuid,'done',now(),-1,'user')$$,
   '23514', null, 'negative actual minutes are rejected'
 );
+select set_config('taskring.command_context', current_setting('wp007.schema_previous_context'), true);
 
 delete from public.goals where id=current_setting('wp003.goal_c')::uuid;
 select results_eq(

@@ -127,6 +127,7 @@ declare
   v_seen_task_ids uuid[] := array[]::uuid[];
   v_seen_positions text[] := array[]::text[];
   v_position_key text;
+  v_previous_context text := pg_catalog.current_setting('taskring.command_context', true);
 begin
   if v_user_id is null then
     raise exception using errcode = '42501', message = 'Authentication required.';
@@ -317,6 +318,7 @@ begin
     );
   end loop;
 
+  perform pg_catalog.set_config('taskring.command_context', coalesce(v_previous_context, ''), true);
   return query select v_new_plan_id, v_next_revision;
 end;
 $$;

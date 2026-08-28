@@ -32,6 +32,20 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> Execution RPC -> projections 
     const userAId = signUpA.user!.id
     const userBId = signUpB.user!.id
 
+
+    for (const forbiddenContext of ['execution:v1', 'publication:v1', 'feedback:v1']) {
+      const response = await fetch(`${url!}/rest/v1/rpc/set_config`, {
+        method: 'POST',
+        headers: {
+          apikey: publishableKey!,
+          Authorization: `Bearer ${signUpA.session!.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ setting_name: 'taskring.command_context', new_value: forbiddenContext, is_local: true }),
+      })
+      expect(response.ok).toBe(false)
+    }
+
     const createTask = async (client: ReturnType<typeof localClient>, userId: string, title: string) => {
       const { data, error } = await client.from('tasks').insert({
         user_id: userId,
@@ -130,7 +144,7 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> Execution RPC -> projections 
       planItemId: doneItem.id,
       expectedState: 'planned',
       action: 'done',
-      occurredAt: '2026-08-28T11:00:00.000Z',
+      occurredAt,
       actualMinutes: 35,
       note: 'completed',
     })).resolves.toBe(eventId)

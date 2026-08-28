@@ -147,7 +147,7 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> JWT -> Data API -> RLS', () =
       occurred_at: new Date().toISOString(),
       actor: 'user',
     })
-    expect(eventInsertError).toBeNull()
+    expect(eventInsertError).not.toBeNull()
 
     const { error: eventUpdateError } = await userAClient.from('task_events').update({ note: 'history must not mutate' }).eq('id', eventId)
     const { error: eventDeleteError } = await userAClient.from('task_events').delete().eq('id', eventId)

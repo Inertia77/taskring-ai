@@ -107,7 +107,7 @@ describe('Today Daily Plan surface', () => {
     expect(screen.getByRole('button', { name: 'Build Today Plan' })).toBeTruthy()
   })
 
-  it('renders real plan buckets in official order and items by position without execution controls or fake brief', async () => {
+  it('renders real plan buckets in official order and items by position with execution controls and no fake brief', async () => {
     const launchProject = project()
     const mustLater = task({ id: 'must-2', title: 'Second MUST', project_id: launchProject.id })
     const mustFirst = task({ id: 'must-1', title: 'First MUST', project_id: launchProject.id })
@@ -130,7 +130,7 @@ describe('Today Daily Plan surface', () => {
     expect(within(mustSection).getAllByText('Launch project')).toHaveLength(2)
     expect(screen.queryByText('Plan brief')).toBeNull()
     for (const forbidden of ['Done', 'Partial', 'Defer', 'Blocked']) expect(screen.queryByRole('button', { name: forbidden })).toBeNull()
-    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('checkbox')).toBeTruthy()
   })
 
   it('builder offers active candidates only, prevents duplicate selection, validates minutes, changes buckets, reorders and removes', async () => {
@@ -215,7 +215,7 @@ describe('Today Daily Plan surface', () => {
   it('blocks editing once a plan item has entered execution state', async () => {
     const repository = makeRepository({ plan: plan(), items: [planItem({ current_state: 'started' })] })
     renderToday(repository)
-    expect(await screen.findByText('Execution has started; replanning is not supported by this stage.')).toBeTruthy()
+    expect(await screen.findByText(/Execution has started\. Plan history is locked/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Edit Today’s Plan' }).hasAttribute('disabled')).toBe(true)
   })
 })

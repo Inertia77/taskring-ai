@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(43);
+select plan(59);
 
 select results_eq(
   $$select count(*)::bigint from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='record_task_action_v01'$$,
@@ -25,9 +25,9 @@ select results_eq(
   $$values (0::bigint)$$,
   'execution RPC denies PUBLIC execute'
 );
-select ok(not has_function_privilege('anon','public.record_task_action_v01(uuid,uuid,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'anon cannot execute execution RPC');
-select ok(not has_function_privilege('service_role','public.record_task_action_v01(uuid,uuid,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'service_role is not granted execution RPC');
-select ok(has_function_privilege('authenticated','public.record_task_action_v01(uuid,uuid,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'authenticated can execute execution RPC');
+select ok(not has_function_privilege('anon','public.record_task_action_v01(uuid,uuid,text,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'anon cannot execute execution RPC');
+select ok(not has_function_privilege('service_role','public.record_task_action_v01(uuid,uuid,text,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'service_role is not granted execution RPC');
+select ok(has_function_privilege('authenticated','public.record_task_action_v01(uuid,uuid,text,text,timestamptz,numeric,integer,integer,text,text)','EXECUTE'),'authenticated can execute execution RPC');
 
 select results_eq(
   $$select count(*)::bigint from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='add_plan_item_feedback_v01'$$,
@@ -97,6 +97,16 @@ select set_config('wp007.item_a3',(select id::text from public.daily_plan_items 
 select set_config('wp007.item_a4',(select id::text from public.daily_plan_items where plan_id=current_setting('wp007.plan_a')::uuid and task_id=current_setting('wp007.task_a4')::uuid),true);
 select set_config('wp007.item_a5',(select id::text from public.daily_plan_items where plan_id=current_setting('wp007.plan_a')::uuid and task_id=current_setting('wp007.task_a5')::uuid),true);
 
+select results_eq(
+  $$select coalesce(nullif(current_setting('taskring.command_context', true),''),'')$$,
+  $$values (''::text)$$,
+  'publish restores command context after success'
+);
+select throws_ok(
+  $$update public.daily_plans set brief='bypass' where id=current_setting('wp007.plan_a')::uuid$$,
+  'P0001','Daily Plan mutations must use publish_daily_plan_v01.','direct Daily Plan mutation remains guarded after publish'
+);
+
 select throws_ok(
   $$insert into public.task_events(id,user_id,task_id,plan_item_id,event_type,occurred_at,actor) values(gen_random_uuid(),current_setting('wp007.user_a')::uuid,current_setting('wp007.task_a1')::uuid,current_setting('wp007.item_a1')::uuid,'started',now(),'user')$$,
   'P0001','Execution mutations must use record_task_action_v01.','direct authenticated event insert is guarded'
@@ -112,7 +122,7 @@ select throws_ok(
 
 select set_config('wp007.event_done',gen_random_uuid()::text,true);
 select lives_ok(
-  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','2026-08-28T09:00:00Z',null,null,45,null,'finished')$$,
+  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'planned','done','2026-08-28T09:00:00Z',null,null,45,null,'finished')$$,
   'Done action succeeds through command RPC'
 );
 select results_eq(
@@ -130,8 +140,26 @@ select results_eq(
   $$values ('done'::text,0,'2026-08-28T09:00:00Z'::timestamptz)$$,
   'Done atomically projects Task done, zero remaining, completed_at'
 );
+
+select results_eq(
+  $$select coalesce(nullif(current_setting('taskring.command_context', true),''),'')$$,
+  $$values (''::text)$$,
+  'execution RPC restores command context after success'
+);
+select throws_ok(
+  $$insert into public.task_events(id,user_id,task_id,plan_item_id,event_type,occurred_at,actor) values(gen_random_uuid(),current_setting('wp007.user_a')::uuid,current_setting('wp007.task_a1')::uuid,current_setting('wp007.item_a1')::uuid,'started',now(),'user')$$,
+  'P0001','Execution mutations must use record_task_action_v01.','direct Event insert remains guarded after execution RPC'
+);
+select throws_ok(
+  $$update public.daily_plan_items set current_state='started' where id=current_setting('wp007.item_a1')::uuid$$,
+  'P0001','Daily Plan Item mutations must use an approved command boundary.','direct current_state update remains guarded after execution RPC'
+);
+select throws_ok(
+  $$update public.tasks set status='active' where id=current_setting('wp007.task_a1')::uuid$$,
+  'P0001','Execution projections must use record_task_action_v01.','direct execution-sensitive Task projection remains guarded after execution RPC'
+);
 select lives_ok(
-  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','2026-08-28T10:00:00Z',null,null,45,null,'finished')$$,
+  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'planned','done','2026-08-28T09:00:00Z',null,null,45,null,'finished')$$,
   'same idempotent Done command can be retried safely'
 );
 select results_eq(
@@ -140,11 +168,11 @@ select results_eq(
   'idempotent retry keeps exactly one Event'
 );
 select throws_ok(
-  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'reopened',now(),null,null,null,null,null)$$,
+  $$select * from public.record_task_action_v01(current_setting('wp007.event_done')::uuid,current_setting('wp007.item_a1')::uuid,'done','reopened',now(),null,null,null,null,null)$$,
   'P0001','Idempotency conflict.','same Event ID with a different command is rejected'
 );
 select throws_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'partial',now(),50,10,null,null,null)$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'done','partial',now(),50,10,null,null,null)$$,
   'P0001','Task is no longer executable.','terminal Task cannot accept Partial without Reopen'
 );
 select results_eq(
@@ -154,7 +182,7 @@ select results_eq(
 );
 
 select lives_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'reopened',now(),null,null,null,null,'undo')$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'done','reopened',now(),null,null,null,null,'undo')$$,
   'Reopen appends history instead of deleting Done'
 );
 select results_eq(
@@ -163,7 +191,7 @@ select results_eq(
   'Reopen projects item started, Task active, and preserves two Events'
 );
 select lives_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'blocked',now(),null,null,null,'dependency',null)$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a1')::uuid,'started','blocked',now(),null,null,null,'dependency',null)$$,
   'Blocked succeeds from started'
 );
 select results_eq(
@@ -173,7 +201,7 @@ select results_eq(
 );
 
 select lives_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial',now(),40,25,20,null,'progress')$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'planned','partial',now(),40,25,20,null,'progress')$$,
   'Partial accepts progress or remaining detail'
 );
 select results_eq(
@@ -182,25 +210,27 @@ select results_eq(
   'Partial atomically records Event and remaining projection'
 );
 select throws_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial',now(),100,null,null,null,null)$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a2')::uuid,'partial','partial',now(),100,null,null,null,null)$$,
   'P0001','Partial progress must be greater than 0 and less than 100.','Partial rejects 100 percent'
 );
 
-select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'skipped',now(),null,null,null,'not today',null)$$,'Skip Today succeeds');
+select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'planned','skipped',now(),null,null,null,'not today',null)$$,'Skip Today succeeds');
 select results_eq($$select current_state from public.daily_plan_items where id=current_setting('wp007.item_a3')::uuid$$,$$values ('skipped'::text)$$,'Skip Today changes only item projection');
-select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a4')::uuid,'deferred',now(),null,null,null,'later',null)$$,'Defer succeeds');
+select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a4')::uuid,'planned','deferred',now(),null,null,null,'later',null)$$,'Defer succeeds');
 select results_eq($$select current_state from public.daily_plan_items where id=current_setting('wp007.item_a4')::uuid$$,$$values ('deferred'::text)$$,'Defer projects item deferred without tomorrow planning');
-select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a5')::uuid,'cancelled',now(),null,null,null,'cancel',null)$$,'Cancel succeeds');
+select lives_ok($$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a5')::uuid,'planned','cancelled',now(),null,null,null,'cancel',null)$$,'Cancel succeeds');
 select results_eq($$select dpi.current_state,t.status from public.daily_plan_items dpi join public.tasks t on t.id=dpi.task_id and t.user_id=dpi.user_id where dpi.id=current_setting('wp007.item_a5')::uuid$$,$$values ('cancelled'::text,'cancelled'::text)$$,'Cancel atomically projects item and Task cancelled');
 
+reset role;
 create or replace function public.wp007_force_event_failure()
 returns trigger language plpgsql set search_path='' as $$ begin
   if new.reason='force-failure' then raise exception using errcode='P0001',message='forced event failure'; end if;
   return new;
 end $$;
 create trigger zz_wp007_force_event_failure before insert on public.task_events for each row execute function public.wp007_force_event_failure();
+set local role authenticated;
 select throws_ok(
-  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'reopened',now(),null,null,null,'force-failure',null)$$,
+  $$select * from public.record_task_action_v01(gen_random_uuid(),current_setting('wp007.item_a3')::uuid,'skipped','reopened',now(),null,null,null,'force-failure',null)$$,
   'P0001','forced event failure','event insertion failure aborts the command'
 );
 select results_eq(
@@ -208,8 +238,10 @@ select results_eq(
   $$values ('skipped'::text)$$,
   'event insertion failure rolls back item projection'
 );
+reset role;
 drop trigger zz_wp007_force_event_failure on public.task_events;
 drop function public.wp007_force_event_failure();
+set local role authenticated;
 
 select set_config('wp007.feedback',gen_random_uuid()::text,true);
 select lives_ok(
@@ -220,6 +252,12 @@ select results_eq(
   $$select user_id,task_id,plan_id,plan_item_id,content,source,ai_interpretation from public.user_feedback where id=current_setting('wp007.feedback')::uuid$$,
   $$values (current_setting('wp007.user_a')::uuid,current_setting('wp007.task_a2')::uuid,current_setting('wp007.plan_a')::uuid,current_setting('wp007.item_a2')::uuid,'Felt harder than expected'::text,'frontend'::text,null::jsonb)$$,
   'feedback ownership/references/source are server-derived and AI interpretation is null'
+);
+
+select results_eq(
+  $$select coalesce(nullif(current_setting('taskring.command_context', true),''),'')$$,
+  $$values (''::text)$$,
+  'feedback RPC restores command context after success'
 );
 select lives_ok(
   $$select * from public.add_plan_item_feedback_v01(current_setting('wp007.feedback')::uuid,current_setting('wp007.item_a2')::uuid,'Felt harder than expected')$$,
@@ -240,9 +278,10 @@ select throws_ok(
 );
 
 reset role;
+select set_config('wp007.fixture_previous_context',coalesce(current_setting('taskring.command_context',true),''),true);
 select set_config('taskring.command_context','execution:v1',true);
 update public.daily_plan_items set current_state='planned' where id=current_setting('wp007.item_a1')::uuid;
-select set_config('taskring.command_context','',true);
+select set_config('taskring.command_context',current_setting('wp007.fixture_previous_context'),true);
 select set_config('request.jwt.claim.sub',current_setting('wp007.user_a'),true);
 select set_config('request.jwt.claim.role','authenticated',true);
 set local role authenticated;
