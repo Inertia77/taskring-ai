@@ -623,7 +623,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      publish_daily_plan_v01: {
+        Args: {
+          p_base_plan_id?: string
+          p_brief?: string
+          p_capacity_breakdown?: Json
+          p_capacity_minutes?: number
+          p_items?: Json
+          p_plan_date: string
+        }
+        Returns: {
+          plan_id: string
+          revision: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
