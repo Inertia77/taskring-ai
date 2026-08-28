@@ -229,9 +229,12 @@ export function TodayPage({
     mutationFn: async ({ itemId, action, details }: { itemId: string; action: TaskAction; details?: ExecutionDetails }) => {
       if (!online) throw new Error('Connect to the internet to record this action. Nothing was saved offline.')
       if (!resolvedExecutionRepository) throw new Error('Execution service is unavailable.')
+      const expectedState = todayQuery.data?.items.find((item) => item.id === itemId)?.current_state
+      if (!expectedState) throw new Error('This Today item is no longer available. Refresh Today.')
       return resolvedExecutionRepository.recordAction({
         eventId: idFactory(),
         planItemId: itemId,
+        expectedState,
         action,
         occurredAt: actionClock().toISOString(),
         ...details,
