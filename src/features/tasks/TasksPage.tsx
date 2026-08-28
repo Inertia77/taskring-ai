@@ -384,7 +384,7 @@ export function TasksPage({ userId, online, repositories }: TasksPageProps) {
   const cancelProject = useMutation({ mutationFn: (id: string) => resolvedRepositories!.projects.cancel(id) })
 
   const busy = [createTask, updateTask, cancelTask, createProject, updateProject, cancelProject].some((mutation) => mutation.isPending)
-  const projects = projectQuery.data ?? []
+  const projects = useMemo(() => projectQuery.data ?? [], [projectQuery.data])
   const assignableProjects = projects.filter(isAssignableProject)
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
 
