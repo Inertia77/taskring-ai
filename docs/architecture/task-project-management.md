@@ -22,6 +22,8 @@ Project definition editing exposes `active`, `paused`, `waiting`, and `done`. Pr
 
 Task completion remains reserved for Task Events in a later execution work package.
 
+Task-to-project assignment is optional. The editor offers only the signed-in user's currently assignable project rows plus `No Project`; the composite ownership foreign key and RLS remain the final database boundary.
+
 ## Time handling
 
 `datetime-local` fields are parsed as local wall-clock values with the `Date(year, month, day, hour, minute)` constructor, validated against calendar normalization, and only then serialized with `toISOString()` for `timestamptz`. Raw database timestamps are not shown in editors.
