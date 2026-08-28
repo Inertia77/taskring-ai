@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { SupabaseHealth } from '../lib/supabaseHealth'
 import { BottomNavigation } from '../components/navigation/BottomNavigation'
 import { NetworkStatus } from '../components/NetworkStatus'
@@ -7,10 +9,12 @@ import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
 import { TodayPage } from '../features/today/TodayPage'
+import { managementQueryKeys } from '../data/queryKeys'
 import { resolveAppRoute, useAppRouter, type AppRoutePath } from './router'
 
 interface AppShellViewProps {
   pathname: string
+  userId: string
   online: boolean
   supabaseHealth: SupabaseHealth
   busy: boolean
@@ -21,6 +25,7 @@ interface AppShellViewProps {
 
 export function AuthenticatedAppShellView({
   pathname,
+  userId,
   online,
   supabaseHealth,
   busy,
@@ -33,7 +38,7 @@ export function AuthenticatedAppShellView({
   const page = {
     today: <TodayPage online={online} supabaseHealth={supabaseHealth} />,
     inbox: <InboxPage />,
-    tasks: <TasksPage />,
+    tasks: <TasksPage userId={userId} online={online} />,
     history: <HistoryPage />,
     settings: (
       <SettingsPage
@@ -69,6 +74,7 @@ export function AuthenticatedAppShellView({
 }
 
 interface AuthenticatedAppShellProps {
+  userId: string
   supabaseHealth: SupabaseHealth
   busy: boolean
   authErrorMessage: string | null
@@ -76,6 +82,7 @@ interface AuthenticatedAppShellProps {
 }
 
 export function AuthenticatedAppShell({
+  userId,
   supabaseHealth,
   busy,
   authErrorMessage,
@@ -83,10 +90,18 @@ export function AuthenticatedAppShell({
 }: AuthenticatedAppShellProps) {
   const router = useAppRouter()
   const online = useNetworkStatus()
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    return () => {
+      queryClient.removeQueries({ queryKey: managementQueryKeys.root(userId) })
+    }
+  }, [queryClient, userId])
 
   return (
     <AuthenticatedAppShellView
       pathname={router.path}
+      userId={userId}
       online={online}
       supabaseHealth={supabaseHealth}
       busy={busy}
