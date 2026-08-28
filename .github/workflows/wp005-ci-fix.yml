@@ -1,0 +1,44 @@
+name: WP005 CI Fix
+
+on:
+  push:
+    branches:
+      - feature/wp005-task-project-management
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Apply lint fixes and remove runner
+        shell: python
+        run: |
+          from pathlib import Path
+
+          test_path = Path('tests/taskProjectManagement.test.tsx')
+          text = test_path.read_text()
+          text = text.replace('cleanup, render, screen, waitFor, within', 'cleanup, render, screen, within')
+          test_path.write_text(text)
+
+          page_path = Path('src/features/tasks/TasksPage.tsx')
+          text = page_path.read_text()
+          old = "  const projects = projectQuery.data ?? []\n  const assignableProjects = projects.filter(isAssignableProject)"
+          new = "  const projects = useMemo(() => projectQuery.data ?? [], [projectQuery.data])\n  const assignableProjects = projects.filter(isAssignableProject)"
+          if old not in text:
+              raise SystemExit('Expected projects initialization not found')
+          page_path.write_text(text.replace(old, new))
+
+          Path('.github/workflows/wp005-ci-fix.yml').unlink()
+      - name: Commit lint fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/taskProjectManagement.test.tsx src/features/tasks/TasksPage.tsx .github/workflows/wp005-ci-fix.yml
+          git commit -m 'WP005: resolve management lint findings'
+          git push
