@@ -66,6 +66,20 @@ export function createDailyPlanRepository(client: SupabaseClient<Database>, user
         .in('id', taskIds)
       if (taskError) throw taskError
 
+      const itemIds = items.map((item) => item.id)
+      const { data: events, error: eventError } = await client
+        .from('task_events')
+        .select('*')
+        .eq('user_id', userId)
+        .in('plan_item_id', itemIds)
+        .order('occurred_at', { ascending: false })
+        .order('created_at', { ascending: false })
+      if (eventError) throw eventError
+      const latestEventByItem = new Map<string, Database['public']['Tables']['task_events']['Row']>()
+      for (const event of events ?? []) {
+        if (event.plan_item_id && !latestEventByItem.has(event.plan_item_id)) latestEventByItem.set(event.plan_item_id, event)
+      }
+
       const taskMap = new Map((tasks ?? []).map((task) => [task.id, task]))
       const projectIds = [...new Set((tasks ?? []).map((task) => task.project_id).filter((id): id is string => Boolean(id)))]
       let projects: Pick<Project, 'id' | 'title'>[] = []
@@ -87,6 +101,7 @@ export function createDailyPlanRepository(client: SupabaseClient<Database>, user
           ...item,
           task,
           project: task.project_id ? projectMap.get(task.project_id) ?? null : null,
+          latestEvent: latestEventByItem.get(item.id) ?? null,
         }
       })
     },
