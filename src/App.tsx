@@ -26,7 +26,7 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
     )
   }
 
-  if (auth.status === 'signed-out') {
+  if (auth.status === 'signed-out' || !auth.session) {
     return (
       <AuthScreen
         busy={auth.busy}
@@ -40,6 +40,7 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
 
   return (
     <AuthenticatedAppShell
+      userId={auth.session.user.id}
       supabaseHealth={supabaseHealth}
       busy={auth.busy}
       authErrorMessage={auth.errorMessage}
