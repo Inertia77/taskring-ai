@@ -130,7 +130,7 @@ describe('Today Daily Plan surface', () => {
     expect(within(mustSection).getAllByText('Launch project')).toHaveLength(2)
     expect(screen.queryByText('Plan brief')).toBeNull()
     for (const forbidden of ['Done', 'Partial', 'Defer', 'Blocked']) expect(screen.queryByRole('button', { name: forbidden })).toBeNull()
-    expect(screen.queryByRole('checkbox')).toBeTruthy()
+    expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0)
   })
 
   it('builder offers active candidates only, prevents duplicate selection, validates minutes, changes buckets, reorders and removes', async () => {
