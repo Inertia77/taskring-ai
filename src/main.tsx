@@ -5,6 +5,7 @@ import App from './App'
 import { queryClient } from './app/queryClient'
 import './styles.css'
 import './features/tasks/tasks.css'
+import './features/today/today.css'
 
 const root = document.getElementById('root')
 
