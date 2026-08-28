@@ -2,6 +2,7 @@ import type { Database } from '../../types/database.types'
 
 export type TaskEvent = Database['public']['Tables']['task_events']['Row']
 export type UserFeedback = Database['public']['Tables']['user_feedback']['Row']
+export type PlanItemExecutionState = Database['public']['Tables']['daily_plan_items']['Row']['current_state']
 
 export const TASK_ACTIONS = ['started', 'partial', 'done', 'skipped', 'deferred', 'blocked', 'cancelled', 'reopened'] as const
 export type TaskAction = (typeof TASK_ACTIONS)[number]
@@ -9,6 +10,7 @@ export type TaskAction = (typeof TASK_ACTIONS)[number]
 export interface RecordTaskActionInput {
   eventId: string
   planItemId: string
+  expectedState: PlanItemExecutionState
   action: TaskAction
   occurredAt: string
   progressPercent?: number | null
