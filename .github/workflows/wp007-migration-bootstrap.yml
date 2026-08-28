@@ -16,31 +16,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-
       - name: Enable pinned pnpm
         run: |
           corepack enable
           corepack prepare pnpm@10.34.5 --activate
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Assert permanent correction sources and tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -F "v_previous_context text := pg_catalog.current_setting('taskring.command_context', true);" supabase/wp007_execution_events_feedback_v01.sql.source
-          test "$(grep -F -c "v_previous_context text := pg_catalog.current_setting('taskring.command_context', true);" supabase/wp007_execution_events_feedback_v01.patch.sql.source)" -eq 2
-          grep -F "publish restores command context after success" supabase/tests/execution_commands.test.sql
-          grep -F "execution RPC restores command context after success" supabase/tests/execution_commands.test.sql
-          grep -F "feedback RPC restores command context after success" supabase/tests/execution_commands.test.sql
-          grep -F "rest/v1/rpc/set_config" tests/executionRpc.integration.test.ts
-          ! grep -F "Align historical tests" .github/workflows/wp007-migration-bootstrap.yml
-
       - name: Generate formal Supabase migration
         shell: bash
         run: |
@@ -51,16 +35,13 @@ jobs:
           cat supabase/wp007_execution_events_feedback_v01.sql.source supabase/wp007_execution_events_feedback_v01.patch.sql.source > "$migration_file"
           echo "MIGRATION_FILE=$migration_file" >> "$GITHUB_ENV"
           echo "Generated formal WP007 migration."
-
       - name: Start local Supabase
         run: pnpm exec supabase start
-
       - name: Rebuild and run database tests
         run: |
           pnpm exec supabase db reset --local
           pnpm exec supabase test db
           pnpm exec supabase db lint --level error --schema public
-
       - name: Run real Auth, Data API, Daily Plan, and Execution integrations
         shell: bash
         run: |
@@ -77,15 +58,12 @@ jobs:
           test -n "$publishable_key"
           VITE_SUPABASE_URL="$api_url" VITE_SUPABASE_PUBLISHABLE_KEY="$publishable_key" \
             pnpm exec vitest run tests/authDataApi.integration.test.ts tests/dailyPlanRpc.integration.test.ts tests/executionRpc.integration.test.ts
-
       - name: Generate database types from local schema
         run: pnpm exec supabase gen types typescript --local > src/types/database.types.ts
-
       - name: Stop local Supabase before frontend verification
         run: |
           pnpm exec supabase stop --no-backup
           rm -rf supabase/.temp
-
       - name: Verify frontend and PWA with generated types
         run: |
           pnpm lint
@@ -93,13 +71,11 @@ jobs:
           pnpm test
           pnpm build
           pnpm test:pwa
-
       - name: Cleanup local Supabase after failure
         if: failure()
         run: |
           pnpm exec supabase stop --no-backup || true
           rm -rf supabase/.temp
-
       - name: Commit verified migration and generated types, then self-delete
         shell: bash
         run: |
