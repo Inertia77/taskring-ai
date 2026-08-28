@@ -77,6 +77,10 @@ function buildPublishItems(items: DraftPlanItem[]) {
   return { result, errors }
 }
 
+function controlId(prefix: string, taskId: string) {
+  return `${prefix}-${taskId}`
+}
+
 export function DailyPlanBuilder({
   currentPlan,
   candidates,
@@ -187,6 +191,9 @@ export function DailyPlanBuilder({
               <div className="builder-item-list">
                 {bucketItems.map((item, bucketIndex) => {
                   const task = taskLookup.get(item.taskId)
+                  const bucketControlId = controlId('today-bucket', item.taskId)
+                  const minutesControlId = controlId('today-planned-minutes', item.taskId)
+                  const minutesErrorId = controlId('today-planned-minutes-error', item.taskId)
                   return (
                     <article className="builder-item" key={item.taskId}>
                       <div className="builder-item-title">
@@ -195,15 +202,21 @@ export function DailyPlanBuilder({
                       </div>
 
                       <div className="builder-item-fields">
-                        <label>
-                          Bucket
-                          <select value={item.bucket} onChange={(event) => updateItem(item.taskId, { bucket: event.target.value as TodayBucket })} disabled={busy}>
+                        <div>
+                          <label htmlFor={bucketControlId}>Bucket</label>
+                          <select
+                            id={bucketControlId}
+                            value={item.bucket}
+                            onChange={(event) => updateItem(item.taskId, { bucket: event.target.value as TodayBucket })}
+                            disabled={busy}
+                          >
                             {TODAY_BUCKETS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           </select>
-                        </label>
-                        <label>
-                          Planned minutes <span className="optional-label">Optional</span>
+                        </div>
+                        <div>
+                          <label htmlFor={minutesControlId}>Planned minutes <span className="optional-label">Optional</span></label>
                           <input
+                            id={minutesControlId}
                             type="number"
                             min="0"
                             step="1"
@@ -211,10 +224,11 @@ export function DailyPlanBuilder({
                             value={item.plannedMinutes}
                             onChange={(event) => updateItem(item.taskId, { plannedMinutes: event.target.value })}
                             aria-invalid={Boolean(errors[item.taskId])}
+                            aria-describedby={errors[item.taskId] ? minutesErrorId : undefined}
                             disabled={busy}
                           />
-                          {errors[item.taskId] ? <span className="field-error" role="alert">{errors[item.taskId]}</span> : null}
-                        </label>
+                          {errors[item.taskId] ? <span id={minutesErrorId} className="field-error" role="alert">{errors[item.taskId]}</span> : null}
+                        </div>
                       </div>
 
                       <div className="builder-item-actions">
