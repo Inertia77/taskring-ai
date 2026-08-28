@@ -71,10 +71,10 @@ begin
 
     if exists (
       select 1
-      from public.daily_plan_items
-      where user_id = v_user_id
-        and plan_id = v_current.id
-        and current_state <> 'planned'
+      from public.daily_plan_items as dpi
+      where dpi.user_id = v_user_id
+        and dpi.plan_id = v_current.id
+        and dpi.current_state <> 'planned'
     ) then
       raise exception using errcode = 'P0001', message = 'Execution has started; replanning is not supported by this stage.';
     end if;

@@ -163,7 +163,8 @@ describe('Today Daily Plan surface', () => {
     const mustBucket = screen.getByRole('heading', { name: '🔥 MUST' }).closest('section')!
     expect(within(mustBucket).getAllByRole('article').map((article) => article.querySelector('strong')?.textContent)).toEqual(['Beta', 'Alpha'])
     await user.click(within(screen.getByText('Beta').closest('article')!).getByRole('button', { name: 'Remove Task' }))
-    expect(screen.queryByText('Beta')).toBeNull()
+    expect(screen.queryByText('Beta', { selector: 'strong' })).toBeNull()
+    expect(within(candidate).getByRole('option', { name: 'Beta' })).toBeTruthy()
   })
 
   it('publishes and refetches into a new displayed revision', async () => {
