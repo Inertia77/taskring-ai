@@ -137,7 +137,7 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> Execution RPC -> projections 
     expect(doneProjection?.current_state).toBe('done')
     expect(doneTask?.status).toBe('done')
     expect(doneTask?.remaining_minutes).toBe(0)
-    expect(doneTask?.completed_at).toBe(occurredAt)
+    expect(new Date(doneTask!.completed_at!).toISOString()).toBe(new Date(occurredAt).toISOString())
 
     await expect(executionA.recordAction({
       eventId,
