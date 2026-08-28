@@ -7,23 +7,15 @@ export function useOfflineCommands(repository: OfflineRepository | null | undefi
   const [loading, setLoading] = useState(Boolean(repository))
 
   const refresh = useCallback(async () => {
-    if (!repository) {
-      setCommands([])
-      setLoading(false)
-      return
-    }
+    if (!repository) return
     const next = await repository.listUserCommands(userId)
     setCommands(next)
     setLoading(false)
   }, [repository, userId])
 
   useEffect(() => {
+    if (!repository) return
     let active = true
-    if (!repository) {
-      setCommands([])
-      setLoading(false)
-      return
-    }
 
     const load = async () => {
       const next = await repository.listUserCommands(userId)
@@ -33,7 +25,6 @@ export function useOfflineCommands(repository: OfflineRepository | null | undefi
       }
     }
 
-    setLoading(true)
     void load()
     const unsubscribe = repository.subscribe(userId, () => void load())
     return () => {
@@ -42,5 +33,9 @@ export function useOfflineCommands(repository: OfflineRepository | null | undefi
     }
   }, [repository, userId])
 
-  return { commands, loading, refresh }
+  return {
+    commands: repository ? commands : [],
+    loading: repository ? loading : false,
+    refresh,
+  }
 }
