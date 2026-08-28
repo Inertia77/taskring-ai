@@ -64,7 +64,7 @@ interface TodayPlanProps {
 }
 
 function TodayPlan({ plan, timeZone, online, busy, onEdit, onAction, onFeedback }: TodayPlanProps) {
-  const executionStarted = plan.items.some((item) => item.current_state !== 'planned' || item.latestEvent !== null)
+  const executionStarted = plan.items.some((item) => item.current_state !== 'planned' || Boolean(item.latestEvent))
 
   return (
     <div className="today-plan-stack">
