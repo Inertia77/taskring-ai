@@ -165,7 +165,7 @@ jobs:
       - name: Lint local database
         run: pnpm exec supabase db lint --level error --schema public
 
-      - name: Real Auth and Data API ownership integration
+      - name: Real Auth, Data API, and Daily Plan RPC integration
         shell: bash
         run: |
           set -euo pipefail
@@ -180,7 +180,7 @@ jobs:
           test -n "$api_url"
           test -n "$publishable_key"
           VITE_SUPABASE_URL="$api_url" VITE_SUPABASE_PUBLISHABLE_KEY="$publishable_key" \
-            pnpm exec vitest run tests/authDataApi.integration.test.ts
+            pnpm exec vitest run tests/authDataApi.integration.test.ts tests/dailyPlanRpc.integration.test.ts
 
       - name: Verify generated database types are current
         shell: bash
