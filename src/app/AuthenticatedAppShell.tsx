@@ -9,7 +9,7 @@ import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
 import { TodayPage } from '../features/today/TodayPage'
-import { managementQueryKeys, todayQueryKeys } from '../data/queryKeys'
+import { historyQueryKeys, managementQueryKeys, todayQueryKeys } from '../data/queryKeys'
 import { resolveAppRoute, useAppRouter, type AppRoutePath } from './router'
 
 interface AppShellViewProps {
@@ -39,7 +39,7 @@ export function AuthenticatedAppShellView({
     today: <TodayPage userId={userId} online={online} />,
     inbox: <InboxPage />,
     tasks: <TasksPage userId={userId} online={online} />,
-    history: <HistoryPage />,
+    history: <HistoryPage userId={userId} />,
     settings: (
       <SettingsPage
         online={online}
@@ -96,6 +96,7 @@ export function AuthenticatedAppShell({
     return () => {
       queryClient.removeQueries({ queryKey: managementQueryKeys.root(userId) })
       queryClient.removeQueries({ queryKey: todayQueryKeys.root(userId) })
+      queryClient.removeQueries({ queryKey: historyQueryKeys.root(userId) })
     }
   }, [queryClient, userId])
 
