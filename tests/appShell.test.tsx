@@ -1,8 +1,10 @@
 import type { Session } from '@supabase/supabase-js'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { AppView, type AppViewAuth } from '../src/App'
 import { AuthenticatedAppShellView } from '../src/app/AuthenticatedAppShell'
+import { createTaskRingQueryClient } from '../src/app/queryClient'
 import { PRIMARY_ROUTES, resolveAppRoute } from '../src/app/router'
 
 const noopAsync = async () => undefined
@@ -21,10 +23,15 @@ function authState(status: AppViewAuth['status']): AppViewAuth {
   }
 }
 
+function withQueryClient(node: React.ReactNode) {
+  return <QueryClientProvider client={createTaskRingQueryClient()}>{node}</QueryClientProvider>
+}
+
 function shellMarkup(pathname: string) {
-  return renderToStaticMarkup(
+  return renderToStaticMarkup(withQueryClient(
     <AuthenticatedAppShellView
       pathname={pathname}
+      userId="synthetic-user"
       online
       supabaseHealth="online"
       busy={false}
@@ -32,7 +39,7 @@ function shellMarkup(pathname: string) {
       onNavigate={() => undefined}
       onSignOut={() => undefined}
     />,
-  )
+  ))
 }
 
 describe('mobile application shell', () => {
@@ -53,7 +60,7 @@ describe('mobile application shell', () => {
     vi.stubGlobal('navigator', { onLine: true })
 
     try {
-      const markup = renderToStaticMarkup(<AppView auth={authState('authenticated')} supabaseHealth="online" />)
+      const markup = renderToStaticMarkup(withQueryClient(<AppView auth={authState('authenticated')} supabaseHealth="online" />))
       expect(markup).toContain('aria-label="Primary"')
       expect(markup).toContain('<h1 id="today-title">Today</h1>')
     } finally {
@@ -61,11 +68,12 @@ describe('mobile application shell', () => {
     }
   })
 
-  it('authenticated shell exposes the five primary surfaces', () => {
+  it('authenticated shell exposes exactly five primary surfaces', () => {
     const markup = shellMarkup('/today')
     expect(markup).toContain('AI Secretary')
     expect(PRIMARY_ROUTES).toHaveLength(5)
     expect((markup.match(/data-primary-nav-item/g) ?? [])).toHaveLength(5)
+    expect(PRIMARY_ROUTES.map((route) => route.key)).not.toContain('projects')
   })
 
   it('root redirects to /today', () => {

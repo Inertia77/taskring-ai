@@ -1,0 +1,73 @@
+name: WP005 Artifact Generator
+
+on:
+  push:
+    branches:
+      - feature/wp005-task-project-management
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.34.5 --activate
+
+      - name: Refresh lockfile and install dependencies
+        run: |
+          pnpm install --lockfile-only --ignore-scripts
+          pnpm install --frozen-lockfile
+
+      - name: Generate migration with Supabase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec supabase migration new task_project_updated_at
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_task_project_updated_at.sql' -print | sort | tail -1)"
+          test -n "$migration_file"
+          cat > "$migration_file" <<'SQL'
+          create or replace function public.set_taskring_updated_at()
+          returns trigger
+          language plpgsql
+          set search_path = ''
+          as $$
+          begin
+            new.updated_at = clock_timestamp();
+            return new;
+          end;
+          $$;
+
+          drop trigger if exists tasks_set_updated_at on public.tasks;
+          create trigger tasks_set_updated_at
+          before update on public.tasks
+          for each row
+          execute function public.set_taskring_updated_at();
+
+          drop trigger if exists projects_set_updated_at on public.projects;
+          create trigger projects_set_updated_at
+          before update on public.projects
+          for each row
+          execute function public.set_taskring_updated_at();
+          SQL
+
+      - name: Commit generated artifacts and remove generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/wp005-artifact-generator.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pnpm-lock.yaml supabase/migrations .github/workflows/wp005-artifact-generator.yml
+          git commit -m 'WP005: generate lockfile and updated_at migration'
+          git push
