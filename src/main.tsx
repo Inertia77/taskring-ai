@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { queryClient } from './app/queryClient'
 import './styles.css'
+import './features/tasks/tasks.css'
 
 const root = document.getElementById('root')
 
