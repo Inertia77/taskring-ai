@@ -274,7 +274,7 @@ describe('offline Today and History surfaces', () => {
     const syncNow = vi.fn(async () => ({ attempted: 0, acknowledged: 0, retrying: 0, conflicts: 0 }))
     renderWithQuery(<HistoryPage userId="user-a" online repository={history} offlineRepository={offline} syncNow={syncNow} />)
     expect(await screen.findByText('Pending feedback')).toBeTruthy()
-    expect(screen.getAllByText('Done')).toHaveLength(1)
+    expect(screen.getAllByText('done')).toHaveLength(1)
     await user.click(screen.getByRole('button', { name: 'Sync Now' }))
     expect(syncNow).toHaveBeenCalledWith(true)
   })
