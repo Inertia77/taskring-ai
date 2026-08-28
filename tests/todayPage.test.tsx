@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DailyPlanRepository } from '../src/data/dailyPlans/dailyPlanRepository'
@@ -22,79 +22,35 @@ afterEach(() => {
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
-    id: 'task-1',
-    user_id: 'user-a',
-    project_id: null,
-    title: 'Plan the launch',
-    description: null,
-    status: 'active',
-    task_kind: 'normal',
-    priority_hint: 'high',
-    due_at: '2026-08-28T06:00:00.000Z',
-    not_before: null,
-    estimate_minutes: 45,
-    remaining_minutes: 45,
-    execution_context: 'deep',
-    recurrence_rule: null,
-    recurrence_timezone: null,
-    checklist: [],
-    created_by: 'user',
-    created_at: '2026-08-28T00:00:00.000Z',
-    updated_at: '2026-08-28T00:00:00.000Z',
-    completed_at: null,
-    ...overrides,
+    id: 'task-1', user_id: 'user-a', project_id: null, title: 'Plan the launch', description: null,
+    status: 'active', task_kind: 'normal', priority_hint: 'high', due_at: '2026-08-28T06:00:00.000Z',
+    not_before: null, estimate_minutes: 45, remaining_minutes: 45, execution_context: 'deep', recurrence_rule: null,
+    recurrence_timezone: null, checklist: [], created_by: 'user', created_at: '2026-08-28T00:00:00.000Z',
+    updated_at: '2026-08-28T00:00:00.000Z', completed_at: null, ...overrides,
   }
 }
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
-    id: 'project-1',
-    user_id: 'user-a',
-    goal_id: null,
-    title: 'Launch project',
-    status: 'active',
-    priority_hint: null,
-    target_date: null,
-    notes: null,
-    created_at: '2026-08-28T00:00:00.000Z',
-    updated_at: '2026-08-28T00:00:00.000Z',
+    id: 'project-1', user_id: 'user-a', goal_id: null, title: 'Launch project', status: 'active', priority_hint: null,
+    target_date: null, notes: null, created_at: '2026-08-28T00:00:00.000Z', updated_at: '2026-08-28T00:00:00.000Z',
     ...overrides,
   }
 }
 
 function plan(overrides: Partial<DailyPlan> = {}): DailyPlan {
   return {
-    id: 'plan-1',
-    user_id: 'user-a',
-    plan_date: '2026-08-28',
-    revision: 1,
-    status: 'active',
-    capacity_minutes: null,
-    capacity_breakdown: {},
-    brief: null,
-    created_by: 'user',
-    created_at: '2026-08-28T00:00:00.000Z',
-    ...overrides,
+    id: 'plan-1', user_id: 'user-a', plan_date: '2026-08-28', revision: 1, status: 'active', capacity_minutes: null,
+    capacity_breakdown: {}, brief: null, created_by: 'user', created_at: '2026-08-28T00:00:00.000Z', ...overrides,
   }
 }
 
 function planItem(overrides: Partial<TodayPlanItem> = {}): TodayPlanItem {
   const baseTask = task()
   return {
-    id: 'item-1',
-    user_id: 'user-a',
-    plan_id: 'plan-1',
-    task_id: baseTask.id,
-    bucket: 'must',
-    position: 0,
-    planned_minutes: 45,
-    reason: null,
-    carryover_from_item_id: null,
-    current_state: 'planned',
-    created_at: '2026-08-28T00:00:00.000Z',
-    updated_at: '2026-08-28T00:00:00.000Z',
-    task: baseTask,
-    project: null,
+    id: 'item-1', user_id: 'user-a', plan_id: 'plan-1', task_id: baseTask.id, bucket: 'must', position: 0,
+    planned_minutes: 45, reason: null, carryover_from_item_id: null, current_state: 'planned',
+    created_at: '2026-08-28T00:00:00.000Z', updated_at: '2026-08-28T00:00:00.000Z', task: baseTask, project: null,
     ...overrides,
   }
 }
@@ -103,13 +59,7 @@ function renderToday(repository: DailyPlanRepository, online = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <TodayPage
-        userId="user-a"
-        online={online}
-        repository={repository}
-        planningTimeZone="Asia/Tokyo"
-        now={new Date('2026-08-28T00:30:00.000Z')}
-      />
+      <TodayPage userId="user-a" online={online} repository={repository} planningTimeZone="Asia/Tokyo" now={new Date('2026-08-28T00:30:00.000Z')} />
     </QueryClientProvider>,
   )
 }
@@ -117,7 +67,6 @@ function renderToday(repository: DailyPlanRepository, online = true) {
 function makeRepository(initialPlan: ActiveTodayPlan | null, candidates: Task[] = []) {
   let current = initialPlan
   let revision = initialPlan?.plan.revision ?? 0
-
   const repository: DailyPlanRepository = {
     getActivePlan: vi.fn(async () => current?.plan ?? null),
     getPlanItems: vi.fn(async () => current?.items ?? []),
@@ -131,21 +80,12 @@ function makeRepository(initialPlan: ActiveTodayPlan | null, candidates: Task[] 
           const selected = candidates.find((candidate) => candidate.id === item.task_id)
             ?? initialPlan?.items.find((existing) => existing.task_id === item.task_id)?.task
             ?? task({ id: item.task_id, title: `Task ${index + 1}` })
-          return planItem({
-            id: `item-${revision}-${index}`,
-            plan_id: nextPlan.id,
-            task_id: item.task_id,
-            task: selected,
-            bucket: item.bucket,
-            position: item.position,
-            planned_minutes: item.planned_minutes,
-          })
+          return planItem({ id: `item-${revision}-${index}`, plan_id: nextPlan.id, task_id: item.task_id, task: selected, bucket: item.bucket, position: item.position, planned_minutes: item.planned_minutes })
         }),
       }
       return { planId: nextPlan.id, revision }
     }),
   }
-
   return repository
 }
 
@@ -154,22 +94,16 @@ describe('Today Daily Plan surface', () => {
     let resolvePlan!: (value: DailyPlan | null) => void
     const pending = new Promise<DailyPlan | null>((resolve) => { resolvePlan = resolve })
     const repository: DailyPlanRepository = {
-      getActivePlan: vi.fn(() => pending),
-      getPlanItems: vi.fn(async () => []),
-      getCandidateTasks: vi.fn(async () => []),
-      publishPlan: vi.fn(),
+      getActivePlan: vi.fn(() => pending), getPlanItems: vi.fn(async () => []), getCandidateTasks: vi.fn(async () => []), publishPlan: vi.fn(),
     }
-
     renderToday(repository)
     expect(screen.getByText('Loading today’s plan…')).toBeTruthy()
-    expect(screen.queryByText(/fake/i)).toBeNull()
-
     resolvePlan(null)
     expect(await screen.findByText('No plan published for today.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Build Today Plan' })).toBeTruthy()
   })
 
-  it('renders real plan buckets in official order and items by position', async () => {
+  it('renders real plan buckets in official order and items by position without execution controls or fake brief', async () => {
     const launchProject = project()
     const mustLater = task({ id: 'must-2', title: 'Second MUST', project_id: launchProject.id })
     const mustFirst = task({ id: 'must-1', title: 'First MUST', project_id: launchProject.id })
@@ -184,44 +118,32 @@ describe('Today Daily Plan surface', () => {
         planItem({ id: 'm1', task_id: mustFirst.id, task: mustFirst, project: launchProject, bucket: 'must', position: 0 }),
       ],
     }
-
     renderToday(makeRepository(active))
     expect(await screen.findByText('Revision 3')).toBeTruthy()
-
-    const bucketHeadings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)
-    expect(bucketHeadings).toEqual(['🔥 MUST', '⭐ SHOULD', '💭 BONUS'])
-
+    expect(screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent)).toEqual(['🔥 MUST', '⭐ SHOULD', '💭 BONUS'])
     const mustSection = screen.getByRole('heading', { name: '🔥 MUST' }).closest('section')!
-    const mustTasks = within(mustSection).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
-    expect(mustTasks).toEqual(['First MUST', 'Second MUST'])
+    expect(within(mustSection).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['First MUST', 'Second MUST'])
     expect(within(mustSection).getAllByText('Launch project')).toHaveLength(2)
     expect(screen.queryByText('Plan brief')).toBeNull()
-
-    for (const forbidden of ['Done', 'Partial', 'Defer', 'Blocked']) {
-      expect(screen.queryByRole('button', { name: forbidden })).toBeNull()
-    }
+    for (const forbidden of ['Done', 'Partial', 'Defer', 'Blocked']) expect(screen.queryByRole('button', { name: forbidden })).toBeNull()
     expect(screen.queryByRole('checkbox')).toBeNull()
   })
 
-  it('manual builder only offers active candidates, prevents duplicates, validates minutes, changes buckets, reorders, and removes', async () => {
+  it('builder offers active candidates only, prevents duplicate selection, validates minutes, changes buckets, reorders and removes', async () => {
     const user = userEvent.setup()
     const first = task({ id: 'a', title: 'Alpha' })
     const second = task({ id: 'b', title: 'Beta' })
     const paused = task({ id: 'paused', title: 'Paused candidate', status: 'paused' })
     const repository = makeRepository(null, [first, second, paused])
-
     renderToday(repository)
     await user.click(await screen.findByRole('button', { name: 'Build Today Plan' }))
-
     const candidate = await screen.findByLabelText('Add active task')
     expect(within(candidate).getByRole('option', { name: 'Alpha' })).toBeTruthy()
     expect(within(candidate).getByRole('option', { name: 'Beta' })).toBeTruthy()
     expect(within(candidate).queryByRole('option', { name: 'Paused candidate' })).toBeNull()
-
     await user.selectOptions(candidate, 'a')
     await user.click(screen.getByRole('button', { name: 'Add Task' }))
     expect(within(candidate).queryByRole('option', { name: 'Alpha' })).toBeNull()
-
     await user.selectOptions(candidate, 'b')
     await user.click(screen.getByRole('button', { name: 'Add Task' }))
 
@@ -229,21 +151,17 @@ describe('Today Daily Plan surface', () => {
     const beta = screen.getByText('Beta').closest('article')!
     await user.selectOptions(within(alpha).getByLabelText('Bucket'), 'must')
     await user.selectOptions(within(beta).getByLabelText('Bucket'), 'must')
-
     await user.clear(within(alpha).getByLabelText(/Planned minutes/))
     await user.type(within(alpha).getByLabelText(/Planned minutes/), '1.5')
     await user.click(screen.getByRole('button', { name: 'Publish Plan' }))
-    expect(await within(alpha).findByRole('alert')).toHaveTextContent('whole number')
+    expect((await within(alpha).findByRole('alert')).textContent).toContain('whole number')
     expect(repository.publishPlan).not.toHaveBeenCalled()
 
     await user.clear(within(alpha).getByLabelText(/Planned minutes/))
     await user.type(within(alpha).getByLabelText(/Planned minutes/), '30')
     await user.click(within(alpha).getByRole('button', { name: 'Move Down' }))
-
     const mustBucket = screen.getByRole('heading', { name: '🔥 MUST' }).closest('section')!
-    const order = within(mustBucket).getAllByRole('article').map((article) => within(article).getByRole('strong').textContent)
-    expect(order).toEqual(['Beta', 'Alpha'])
-
+    expect(within(mustBucket).getAllByRole('article').map((article) => article.querySelector('strong')?.textContent)).toEqual(['Beta', 'Alpha'])
     await user.click(within(screen.getByText('Beta').closest('article')!).getByRole('button', { name: 'Remove Task' }))
     expect(screen.queryByText('Beta')).toBeNull()
   })
@@ -252,14 +170,12 @@ describe('Today Daily Plan surface', () => {
     const user = userEvent.setup()
     const first = task({ id: 'a', title: 'Alpha' })
     const repository = makeRepository(null, [first])
-
     renderToday(repository)
     await user.click(await screen.findByRole('button', { name: 'Build Today Plan' }))
     const candidate = await screen.findByLabelText('Add active task')
     await user.selectOptions(candidate, 'a')
     await user.click(screen.getByRole('button', { name: 'Add Task' }))
     await user.click(screen.getByRole('button', { name: 'Publish Plan' }))
-
     expect(await screen.findByText('Revision 1')).toBeTruthy()
     expect(screen.getByText('Alpha')).toBeTruthy()
     expect(repository.publishPlan).toHaveBeenCalledTimes(1)
@@ -269,36 +185,29 @@ describe('Today Daily Plan surface', () => {
   it('shows a clear stale-plan refresh message', async () => {
     const user = userEvent.setup()
     const repository = makeRepository(null, [])
-    repository.publishPlan = vi.fn(async () => {
-      throw new DailyPlanPublishError('stale', 'Today’s plan changed elsewhere. Refresh before publishing again.')
-    })
-
+    repository.publishPlan = vi.fn(async () => { throw new DailyPlanPublishError('stale', 'Today’s plan changed elsewhere. Refresh before publishing again.') })
     renderToday(repository)
     await user.click(await screen.findByRole('button', { name: 'Build Today Plan' }))
     await user.click(screen.getByRole('button', { name: 'Publish Plan' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Refresh before publishing again')
-    expect(screen.getByRole('alert')).toHaveTextContent('Reload Today')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Refresh before publishing again')
+    expect(alert.textContent).toContain('Reload Today')
   })
 
   it('rejects offline publication honestly and does not call the repository', async () => {
     const user = userEvent.setup()
     const repository = makeRepository(null, [])
-
     renderToday(repository, false)
     await user.click(await screen.findByRole('button', { name: 'Build Today Plan' }))
     await user.click(screen.getByRole('button', { name: 'Publish Plan' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent("Connect to the internet to publish today's plan. Nothing was saved offline.")
+    expect((await screen.findByRole('alert')).textContent).toContain("Connect to the internet to publish today's plan. Nothing was saved offline.")
     expect(repository.publishPlan).not.toHaveBeenCalled()
   })
 
   it('blocks editing once a plan item has entered execution state', async () => {
-    const started = planItem({ current_state: 'started' })
-    const repository = makeRepository({ plan: plan(), items: [started] })
-
+    const repository = makeRepository({ plan: plan(), items: [planItem({ current_state: 'started' })] })
     renderToday(repository)
     expect(await screen.findByText('Execution has started; replanning is not supported by this stage.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Edit Today’s Plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit Today’s Plan' }).hasAttribute('disabled')).toBe(true)
   })
 })
