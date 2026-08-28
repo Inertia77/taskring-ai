@@ -107,11 +107,7 @@ describe.skipIf(!hasLocalAuth)('real local Auth -> RPC -> Data API -> Daily Plan
     expect(anonPlanReadError).not.toBeNull()
     const { error: anonRpcError } = await anonClient.rpc('publish_daily_plan_v01', {
       p_plan_date: planDate,
-      p_base_plan_id: null,
       p_items: [],
-      p_capacity_minutes: null,
-      p_capacity_breakdown: null,
-      p_brief: null,
     })
     expect(anonRpcError).not.toBeNull()
 
