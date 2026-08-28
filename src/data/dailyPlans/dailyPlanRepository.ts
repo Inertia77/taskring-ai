@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '../../types/database.types'
+import type { Database, Json } from '../../types/database.types'
 import type { Project, Task } from '../models'
 import {
   DailyPlanPublishError,
@@ -104,14 +104,26 @@ export function createDailyPlanRepository(client: SupabaseClient<Database>, user
     },
 
     async publishPlan(input) {
-      const { data, error } = await client.rpc('publish_daily_plan_v01', {
+      const rpcItems: Json = input.items.map((item) => ({
+        task_id: item.task_id,
+        bucket: item.bucket,
+        position: item.position,
+        planned_minutes: item.planned_minutes,
+        reason: item.reason,
+      }))
+      const args: Database['public']['Functions']['publish_daily_plan_v01']['Args'] = {
         p_plan_date: input.planDate,
-        p_base_plan_id: input.basePlanId,
-        p_items: input.items,
-        p_capacity_minutes: input.capacityMinutes ?? null,
-        p_capacity_breakdown: input.capacityBreakdown ?? null,
-        p_brief: input.brief ?? null,
-      })
+        p_items: rpcItems,
+        ...(input.basePlanId !== null ? { p_base_plan_id: input.basePlanId } : {}),
+        ...(input.capacityMinutes !== undefined && input.capacityMinutes !== null
+          ? { p_capacity_minutes: input.capacityMinutes }
+          : {}),
+        ...(input.capacityBreakdown !== undefined && input.capacityBreakdown !== null
+          ? { p_capacity_breakdown: input.capacityBreakdown }
+          : {}),
+        ...(input.brief !== undefined && input.brief !== null ? { p_brief: input.brief } : {}),
+      }
+      const { data, error } = await client.rpc('publish_daily_plan_v01', args)
       if (error) throw publishError(error.message)
       const result = data?.[0]
       if (!result) throw new DailyPlanPublishError('server', 'Today’s plan could not be published. Please try again.')
