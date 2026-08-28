@@ -89,6 +89,10 @@ function makeRepository(initialPlan: ActiveTodayPlan | null, candidates: Task[] 
   return repository
 }
 
+function builderItem(title: string) {
+  return screen.getByText(title, { selector: 'strong' }).closest('article')!
+}
+
 describe('Today Daily Plan surface', () => {
   it('shows loading and then the real no-plan state without fake tasks', async () => {
     let resolvePlan!: (value: DailyPlan | null) => void
@@ -147,22 +151,25 @@ describe('Today Daily Plan surface', () => {
     await user.selectOptions(candidate, 'b')
     await user.click(screen.getByRole('button', { name: 'Add Task' }))
 
-    const alpha = screen.getByText('Alpha').closest('article')!
-    const beta = screen.getByText('Beta').closest('article')!
-    await user.selectOptions(within(alpha).getByLabelText('Bucket'), 'must')
-    await user.selectOptions(within(beta).getByLabelText('Bucket'), 'must')
+    await user.selectOptions(within(builderItem('Alpha')).getByLabelText('Bucket'), 'must')
+    await user.selectOptions(within(builderItem('Beta')).getByLabelText('Bucket'), 'must')
+
+    let alpha = builderItem('Alpha')
     await user.clear(within(alpha).getByLabelText(/Planned minutes/))
     await user.type(within(alpha).getByLabelText(/Planned minutes/), '1.5')
     await user.click(screen.getByRole('button', { name: 'Publish Plan' }))
+    alpha = builderItem('Alpha')
     expect((await within(alpha).findByRole('alert')).textContent).toContain('whole number')
     expect(repository.publishPlan).not.toHaveBeenCalled()
 
+    alpha = builderItem('Alpha')
     await user.clear(within(alpha).getByLabelText(/Planned minutes/))
     await user.type(within(alpha).getByLabelText(/Planned minutes/), '30')
+    alpha = builderItem('Alpha')
     await user.click(within(alpha).getByRole('button', { name: 'Move Down' }))
     const mustBucket = screen.getByRole('heading', { name: '🔥 MUST' }).closest('section')!
     expect(within(mustBucket).getAllByRole('article').map((article) => article.querySelector('strong')?.textContent)).toEqual(['Beta', 'Alpha'])
-    await user.click(within(screen.getByText('Beta').closest('article')!).getByRole('button', { name: 'Remove Task' }))
+    await user.click(within(builderItem('Beta')).getByRole('button', { name: 'Remove Task' }))
     expect(screen.queryByText('Beta', { selector: 'strong' })).toBeNull()
     expect(within(candidate).getByRole('option', { name: 'Beta' })).toBeTruthy()
   })
