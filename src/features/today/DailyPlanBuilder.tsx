@@ -217,6 +217,7 @@ export function DailyPlanBuilder({
                           <label htmlFor={minutesControlId}>Planned minutes <span className="optional-label">Optional</span></label>
                           <input
                             id={minutesControlId}
+                            aria-label="Planned minutes"
                             type="number"
                             min="0"
                             step="1"
