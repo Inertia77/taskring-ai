@@ -8,6 +8,7 @@ import './features/tasks/tasks.css'
 import './features/today/today.css'
 import './features/today/execution.css'
 import './features/history/history.css'
+import './features/offline/offline.css'
 
 const root = document.getElementById('root')
 

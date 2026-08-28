@@ -11,7 +11,20 @@ export interface ExecutionRepository {
   addFeedback(input: AddFeedbackInput): Promise<string>
 }
 
+function commonTransportError(message: string) {
+  const lower = message.toLowerCase()
+  if (/authentication required|permission denied|not authorized|unauthorized|forbidden|row-level security|jwt/.test(lower)) {
+    return new ExecutionCommandError('auth', 'Your session can no longer sync this command. Sign in again or discard the local command.')
+  }
+  if (/failed to fetch|fetch failed|network|timeout|timed out|connection|reset|temporar|bad gateway|service unavailable|gateway timeout/.test(lower)) {
+    return new ExecutionCommandError('retryable', 'The server is temporarily unreachable. This command remains Pending Sync.')
+  }
+  return null
+}
+
 function commandError(message: string) {
+  const common = commonTransportError(message)
+  if (common) return common
   if (message.includes('Idempotency conflict.')) {
     return new ExecutionCommandError('idempotency', 'This action conflicts with an earlier retry. Refresh before trying again.')
   }
@@ -35,10 +48,12 @@ function commandError(message: string) {
   if (message.includes('Plan Item is unavailable.') || message.includes('Task is unavailable.')) {
     return new ExecutionCommandError('unavailable', 'This Today item is no longer available. Refresh Today.')
   }
-  return new ExecutionCommandError('server', 'The action could not be recorded. Please try again.')
+  return new ExecutionCommandError('server', 'The action could not be recorded. Review the server state before retrying.')
 }
 
 function feedbackError(message: string) {
+  const common = commonTransportError(message)
+  if (common) return common
   if (message.includes('Idempotency conflict.')) {
     return new ExecutionCommandError('idempotency', 'This feedback conflicts with an earlier retry. Refresh before trying again.')
   }
@@ -48,7 +63,7 @@ function feedbackError(message: string) {
   if (message.includes('Plan Item is unavailable.')) {
     return new ExecutionCommandError('unavailable', 'This Today item is no longer available. Refresh Today.')
   }
-  return new ExecutionCommandError('server', 'Feedback could not be saved. Please try again.')
+  return new ExecutionCommandError('server', 'Feedback could not be saved. Review the server state before retrying.')
 }
 
 export function createExecutionRepository(client: SupabaseClient<Database>): ExecutionRepository {
@@ -66,11 +81,17 @@ export function createExecutionRepository(client: SupabaseClient<Database>): Exe
         ...(input.reason ? { p_reason: input.reason } : {}),
         ...(input.note ? { p_note: input.note } : {}),
       }
-      const { data, error } = await client.rpc('record_task_action_v01', args)
-      if (error) throw commandError(error.message)
-      const result = data?.[0]
-      if (!result) throw new ExecutionCommandError('server', 'The action could not be recorded. Please try again.')
-      return result.event_id
+      try {
+        const { data, error } = await client.rpc('record_task_action_v01', args)
+        if (error) throw commandError(error.message)
+        const result = data?.[0]
+        if (!result) throw new ExecutionCommandError('retryable', 'The server response was incomplete. This command remains Pending Sync.')
+        return result.event_id
+      } catch (error) {
+        if (error instanceof ExecutionCommandError) throw error
+        throw commonTransportError(error instanceof Error ? error.message : String(error))
+          ?? new ExecutionCommandError('retryable', 'The server response could not be received. This command remains Pending Sync.')
+      }
     },
 
     async addFeedback(input) {
@@ -79,11 +100,17 @@ export function createExecutionRepository(client: SupabaseClient<Database>): Exe
         p_plan_item_id: input.planItemId,
         p_content: input.content,
       }
-      const { data, error } = await client.rpc('add_plan_item_feedback_v01', args)
-      if (error) throw feedbackError(error.message)
-      const result = data?.[0]
-      if (!result) throw new ExecutionCommandError('server', 'Feedback could not be saved. Please try again.')
-      return result.feedback_id
+      try {
+        const { data, error } = await client.rpc('add_plan_item_feedback_v01', args)
+        if (error) throw feedbackError(error.message)
+        const result = data?.[0]
+        if (!result) throw new ExecutionCommandError('retryable', 'The server response was incomplete. This feedback remains Pending Sync.')
+        return result.feedback_id
+      } catch (error) {
+        if (error instanceof ExecutionCommandError) throw error
+        throw commonTransportError(error instanceof Error ? error.message : String(error))
+          ?? new ExecutionCommandError('retryable', 'The server response could not be received. This feedback remains Pending Sync.')
+      }
     },
   }
 }

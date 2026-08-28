@@ -26,7 +26,14 @@ export interface AddFeedbackInput {
   content: string
 }
 
-export type ExecutionCommandErrorKind = 'idempotency' | 'transition' | 'validation' | 'unavailable' | 'server'
+export type ExecutionCommandErrorKind =
+  | 'idempotency'
+  | 'transition'
+  | 'validation'
+  | 'unavailable'
+  | 'auth'
+  | 'retryable'
+  | 'server'
 
 export class ExecutionCommandError extends Error {
   readonly kind: ExecutionCommandErrorKind

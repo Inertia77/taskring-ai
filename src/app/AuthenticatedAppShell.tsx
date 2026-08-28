@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { SupabaseHealth } from '../lib/supabaseHealth'
 import { BottomNavigation } from '../components/navigation/BottomNavigation'
@@ -9,7 +9,13 @@ import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TasksPage } from '../features/tasks/TasksPage'
 import { TodayPage } from '../features/today/TodayPage'
+import { createDailyPlanRepository } from '../data/dailyPlans/dailyPlanRepository'
+import { createExecutionRepository } from '../data/execution/executionRepository'
+import { EMPTY_SYNC_SUMMARY, type OfflineCommand, type SyncSummary } from '../data/offline/models'
+import { getDefaultOfflineRepository, type OfflineRepository } from '../data/offline/offlineRepository'
+import { createOutboxSyncEngine, type OutboxSyncEngine } from '../data/offline/syncEngine'
 import { historyQueryKeys, managementQueryKeys, todayQueryKeys } from '../data/queryKeys'
+import { supabase } from '../lib/supabaseClient'
 import { resolveAppRoute, useAppRouter, type AppRoutePath } from './router'
 
 interface AppShellViewProps {
@@ -21,6 +27,8 @@ interface AppShellViewProps {
   authErrorMessage: string | null
   onNavigate: (path: AppRoutePath) => void
   onSignOut: () => void
+  offlineRepository?: OfflineRepository | null
+  syncNow?: (force?: boolean) => Promise<SyncSummary>
 }
 
 export function AuthenticatedAppShellView({
@@ -32,20 +40,25 @@ export function AuthenticatedAppShellView({
   authErrorMessage,
   onNavigate,
   onSignOut,
+  offlineRepository,
+  syncNow,
 }: AppShellViewProps) {
   const route = resolveAppRoute(pathname)
 
   const page = {
-    today: <TodayPage userId={userId} online={online} />,
+    today: <TodayPage userId={userId} online={online} offlineRepository={offlineRepository} syncNow={syncNow} />,
     inbox: <InboxPage />,
     tasks: <TasksPage userId={userId} online={online} />,
-    history: <HistoryPage userId={userId} />,
+    history: <HistoryPage userId={userId} online={online} offlineRepository={offlineRepository} syncNow={syncNow} />,
     settings: (
       <SettingsPage
         online={online}
         supabaseHealth={supabaseHealth}
         busy={busy}
         authErrorMessage={authErrorMessage}
+        userId={userId}
+        offlineRepository={offlineRepository}
+        syncNow={syncNow}
         onSignOut={onSignOut}
       />
     ),
@@ -91,6 +104,53 @@ export function AuthenticatedAppShell({
   const router = useAppRouter()
   const online = useNetworkStatus()
   const queryClient = useQueryClient()
+  const offlineRepository = useMemo(() => getDefaultOfflineRepository(), [])
+  const dailyPlanRepository = useMemo(() => {
+    if (!supabase) return null
+    return createDailyPlanRepository(supabase, userId)
+  }, [userId])
+  const executionRepository = useMemo(() => {
+    if (!supabase) return null
+    return createExecutionRepository(supabase)
+  }, [])
+
+  const reconcile = useCallback(async (command: OfflineCommand) => {
+    if (!offlineRepository || !dailyPlanRepository) throw new Error('Authoritative reconciliation is unavailable.')
+    const plan = await dailyPlanRepository.getActivePlan(command.plan_date)
+    if (plan) {
+      const items = await dailyPlanRepository.getPlanItems(plan.id)
+      await offlineRepository.saveTodaySnapshot(userId, command.plan_date, { plan, items })
+    } else {
+      await offlineRepository.clearTodaySnapshot(userId, command.plan_date)
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: todayQueryKeys.plan(userId, command.plan_date) }),
+      queryClient.invalidateQueries({ queryKey: todayQueryKeys.candidates(userId, command.plan_date) }),
+      queryClient.invalidateQueries({ queryKey: managementQueryKeys.tasks(userId) }),
+      queryClient.invalidateQueries({ queryKey: historyQueryKeys.events(userId) }),
+      queryClient.invalidateQueries({ queryKey: historyQueryKeys.feedback(userId) }),
+    ])
+  }, [dailyPlanRepository, offlineRepository, queryClient, userId])
+
+  const syncEngine: OutboxSyncEngine | null = useMemo(() => {
+    if (!offlineRepository || !executionRepository) return null
+    return createOutboxSyncEngine({
+      userId,
+      repository: offlineRepository,
+      executionRepository,
+      reconcile,
+    })
+  }, [executionRepository, offlineRepository, reconcile, userId])
+
+  const syncNow = useCallback((force = true) => {
+    if (!syncEngine) return Promise.resolve({ ...EMPTY_SYNC_SUMMARY })
+    return syncEngine.syncNow(force)
+  }, [syncEngine])
+
+  useEffect(() => {
+    if (!online || !syncEngine) return
+    void syncEngine.syncNow(false)
+  }, [online, syncEngine])
 
   useEffect(() => {
     return () => {
@@ -110,6 +170,8 @@ export function AuthenticatedAppShell({
       authErrorMessage={authErrorMessage}
       onNavigate={router.navigate}
       onSignOut={onSignOut}
+      offlineRepository={offlineRepository}
+      syncNow={syncNow}
     />
   )
 }
