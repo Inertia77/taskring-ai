@@ -28,6 +28,10 @@ Task-to-project assignment is optional. The editor offers only the signed-in use
 
 `datetime-local` fields are parsed as local wall-clock values with the `Date(year, month, day, hour, minute)` constructor, validated against calendar normalization, and only then serialized with `toISOString()` for `timestamptz`. Raw database timestamps are not shown in editors.
 
+## Testing
+
+Interactive frontend tests use semantic roles and labels rather than DOM structure. Label queries tolerate adjacent validation/help text so the tests assert accessible control identity without coupling to copy changes.
+
 ## PWA boundary
 
 WP004 remains unchanged: static application-shell precaching only, with `runtimeCaching: []`. Supabase Auth/Data API responses are not cached by the service worker.
