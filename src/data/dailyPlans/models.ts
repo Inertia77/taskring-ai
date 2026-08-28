@@ -20,7 +20,7 @@ export type TodayBucket = (typeof TODAY_BUCKETS)[number]['value']
 export interface TodayPlanItem extends DailyPlanItem {
   task: Task
   project: Pick<Project, 'id' | 'title'> | null
-  latestEvent: TaskEvent | null
+  latestEvent?: TaskEvent | null
 }
 
 export interface ActiveTodayPlan {
