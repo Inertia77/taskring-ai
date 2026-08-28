@@ -69,6 +69,11 @@ jobs:
       - name: Generate database types from local schema
         run: pnpm exec supabase gen types typescript --local > src/types/database.types.ts
 
+      - name: Stop local Supabase before frontend verification
+        run: |
+          pnpm exec supabase stop --no-backup
+          rm -rf supabase/.temp
+
       - name: Verify frontend and PWA with generated types
         run: |
           pnpm lint
@@ -77,9 +82,11 @@ jobs:
           pnpm build
           pnpm test:pwa
 
-      - name: Stop local Supabase
-        if: always()
-        run: pnpm exec supabase stop --no-backup
+      - name: Cleanup local Supabase after failure
+        if: failure()
+        run: |
+          pnpm exec supabase stop --no-backup || true
+          rm -rf supabase/.temp
 
       - name: Commit verified migration and generated types, then self-delete
         shell: bash
