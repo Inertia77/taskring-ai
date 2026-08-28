@@ -171,10 +171,15 @@ select results_eq(
   'cross-owner failure rolls back without destroying active plan'
 );
 
-update public.daily_plan_items
-set current_state='started'
-where plan_id=current_setting('wp006.plan2')::uuid
-  and task_id=current_setting('wp006.task_a1')::uuid;
+select set_config(
+  'wp006.execution_event',
+  (select event_id::text from public.record_task_action_v01(
+    gen_random_uuid(),
+    (select id from public.daily_plan_items where plan_id=current_setting('wp006.plan2')::uuid and task_id=current_setting('wp006.task_a1')::uuid),
+    'planned','started',now(),null,null,null,null,null
+  )),
+  true
+);
 
 select throws_ok(
   $$select * from public.publish_daily_plan_v01('2026-08-28'::date,current_setting('wp006.plan2')::uuid,'[]'::jsonb,null,null,null)$$,

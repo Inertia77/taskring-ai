@@ -3,6 +3,7 @@ import type { Project, Task } from '../models'
 
 export type DailyPlan = Database['public']['Tables']['daily_plans']['Row']
 export type DailyPlanItem = Database['public']['Tables']['daily_plan_items']['Row']
+export type TaskEvent = Database['public']['Tables']['task_events']['Row']
 
 export const TODAY_BUCKETS = [
   { value: 'must', label: '🔥 MUST' },
@@ -19,6 +20,7 @@ export type TodayBucket = (typeof TODAY_BUCKETS)[number]['value']
 export interface TodayPlanItem extends DailyPlanItem {
   task: Task
   project: Pick<Project, 'id' | 'title'> | null
+  latestEvent?: TaskEvent | null
 }
 
 export interface ActiveTodayPlan {

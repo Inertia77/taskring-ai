@@ -6,6 +6,8 @@ import { queryClient } from './app/queryClient'
 import './styles.css'
 import './features/tasks/tasks.css'
 import './features/today/today.css'
+import './features/today/execution.css'
+import './features/history/history.css'
 
 const root = document.getElementById('root')
 
