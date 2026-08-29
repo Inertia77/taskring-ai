@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react'
 import { AuthenticatedAppShell } from './app/AuthenticatedAppShell'
 import { AuthScreen } from './components/AuthScreen'
 import { useAuthSession, type AuthSessionState } from './hooks/useAuthSession'
-import { checkSupabaseHealth, type SupabaseHealth } from './lib/supabaseHealth'
-
-const projectUrl = import.meta.env.VITE_SUPABASE_URL
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+import { useEffectiveConnectivity } from './hooks/useNetworkStatus'
+import type { SupabaseHealth } from './lib/supabaseHealth'
 
 export interface AppViewAuth extends AuthSessionState {
   signIn: (email: string, password: string) => Promise<void>
@@ -41,6 +38,7 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
   return (
     <AuthenticatedAppShell
       userId={auth.session.user.id}
+      online={supabaseHealth === 'online'}
       supabaseHealth={supabaseHealth}
       busy={auth.busy}
       authErrorMessage={auth.errorMessage}
@@ -50,29 +48,10 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
 }
 
 function App() {
-  const auth = useAuthSession()
-  const [supabaseHealth, setSupabaseHealth] = useState<SupabaseHealth>(
-    projectUrl && publishableKey ? 'checking' : 'not-configured',
-  )
+  const connectivity = useEffectiveConnectivity()
+  const auth = useAuthSession(connectivity.online)
 
-  useEffect(() => {
-    if (!projectUrl || !publishableKey) return
-
-    let active = true
-    checkSupabaseHealth(projectUrl, publishableKey)
-      .then((online) => {
-        if (active) setSupabaseHealth(online ? 'online' : 'offline')
-      })
-      .catch(() => {
-        if (active) setSupabaseHealth('offline')
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
-
-  return <AppView auth={auth} supabaseHealth={supabaseHealth} />
+  return <AppView auth={auth} supabaseHealth={connectivity.supabaseHealth} />
 }
 
 export default App

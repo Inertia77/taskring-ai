@@ -8,13 +8,25 @@ export async function checkSupabaseHealth(
   projectUrl: string,
   publishableKey: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = 5_000,
 ): Promise<boolean> {
-  const response = await fetchImpl(buildSupabaseHealthUrl(projectUrl), {
-    method: 'GET',
-    headers: {
-      apikey: publishableKey,
-    },
-  })
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+  const timeout = controller && timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null
 
-  return response.ok
+  try {
+    const response = await fetchImpl(buildSupabaseHealthUrl(projectUrl), {
+      method: 'GET',
+      headers: {
+        apikey: publishableKey,
+      },
+      cache: 'no-store',
+      signal: controller?.signal,
+    })
+
+    return response.ok
+  } finally {
+    if (timeout !== null) clearTimeout(timeout)
+  }
 }
