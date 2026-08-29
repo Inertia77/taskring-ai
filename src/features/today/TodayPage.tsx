@@ -241,6 +241,7 @@ export function TodayPage({
       return resolvedOfflineRepository.getTodaySnapshot(userId, planDate)
     },
     enabled: !online && Boolean(resolvedOfflineRepository),
+    networkMode: 'always',
   })
 
   useEffect(() => {
