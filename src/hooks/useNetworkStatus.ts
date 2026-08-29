@@ -42,26 +42,27 @@ export function useEffectiveConnectivity({
     let retryTimer: ReturnType<typeof setTimeout> | null = null
     let probeGeneration = 0
     let probeInFlight = false
+    let probeAgain = false
 
-    const clearRetry = () => {
+    function clearRetry() {
       if (retryTimer !== null) {
         clearTimeout(retryTimer)
         retryTimer = null
       }
     }
 
-    const markOffline = () => {
+    function markOffline() {
       if (active) setSupabaseHealth('offline')
     }
 
-    const retryDelay = () => {
-      if (retryDelaysMs.length === 0) return DEFAULT_RETRY_DELAYS_MS.at(-1)!
+    function retryDelay() {
+      if (retryDelaysMs.length === 0) {
+        return DEFAULT_RETRY_DELAYS_MS[DEFAULT_RETRY_DELAYS_MS.length - 1]
+      }
       return retryDelaysMs[Math.min(retryAttempt, retryDelaysMs.length - 1)]
     }
 
-    let probe: () => Promise<void>
-
-    const scheduleRetry = () => {
+    function scheduleRetry() {
       if (!active || !browserOnline()) return
       clearRetry()
       const delay = retryDelay()
@@ -72,8 +73,12 @@ export function useEffectiveConnectivity({
       }, delay)
     }
 
-    probe = async () => {
-      if (!active || probeInFlight) return
+    async function probe() {
+      if (!active) return
+      if (probeInFlight) {
+        probeAgain = true
+        return
+      }
       if (!browserOnline()) {
         probeGeneration += 1
         markOffline()
@@ -81,6 +86,7 @@ export function useEffectiveConnectivity({
       }
 
       probeInFlight = true
+      probeAgain = false
       const generation = ++probeGeneration
 
       try {
@@ -106,23 +112,27 @@ export function useEffectiveConnectivity({
         scheduleRetry()
       } finally {
         probeInFlight = false
+        if (active && probeAgain) {
+          probeAgain = false
+          void probe()
+        }
       }
     }
 
-    const handleOffline = () => {
+    function handleOffline() {
       probeGeneration += 1
-      probeInFlight = false
+      probeAgain = false
       clearRetry()
       markOffline()
     }
 
-    const handleOnline = () => {
+    function handleOnline() {
       retryAttempt = 0
       clearRetry()
       void probe()
     }
 
-    const handleFocus = () => {
+    function handleFocus() {
       if (!browserOnline()) {
         handleOffline()
         return
@@ -130,7 +140,7 @@ export function useEffectiveConnectivity({
       void probe()
     }
 
-    const handleVisibility = () => {
+    function handleVisibility() {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         handleFocus()
       }
@@ -155,6 +165,7 @@ export function useEffectiveConnectivity({
     return () => {
       active = false
       probeGeneration += 1
+      probeAgain = false
       clearRetry()
       if (typeof window !== 'undefined') {
         window.removeEventListener('online', handleOnline)
