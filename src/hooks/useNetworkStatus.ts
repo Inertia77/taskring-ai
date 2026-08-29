@@ -26,6 +26,7 @@ export function useEffectiveConnectivity({
   retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
 }: EffectiveConnectivityOptions = {}): EffectiveConnectivity {
   const configured = Boolean(projectUrl && publishableKey)
+  const retrySchedule = retryDelaysMs.length > 0 ? retryDelaysMs.join(',') : ''
   const [supabaseHealth, setSupabaseHealth] = useState<SupabaseHealth>(() => {
     if (!configured) return 'not-configured'
     return browserOnline() ? 'checking' : 'offline'
@@ -36,6 +37,13 @@ export function useEffectiveConnectivity({
       setSupabaseHealth(configured ? 'offline' : 'not-configured')
       return
     }
+
+    const normalizedRetryDelays = retrySchedule
+      ? retrySchedule
+          .split(',')
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value >= 0)
+      : []
 
     let active = true
     let retryAttempt = 0
@@ -56,10 +64,10 @@ export function useEffectiveConnectivity({
     }
 
     function retryDelay() {
-      if (retryDelaysMs.length === 0) {
+      if (normalizedRetryDelays.length === 0) {
         return DEFAULT_RETRY_DELAYS_MS[DEFAULT_RETRY_DELAYS_MS.length - 1]
       }
-      return retryDelaysMs[Math.min(retryAttempt, retryDelaysMs.length - 1)]
+      return normalizedRetryDelays[Math.min(retryAttempt, normalizedRetryDelays.length - 1)]
     }
 
     function scheduleRetry() {
@@ -176,7 +184,7 @@ export function useEffectiveConnectivity({
         document.removeEventListener('visibilitychange', handleVisibility)
       }
     }
-  }, [configured, fetchImpl, projectUrl, publishableKey, retryDelaysMs])
+  }, [configured, fetchImpl, projectUrl, publishableKey, retrySchedule])
 
   return {
     online: supabaseHealth === 'online',
