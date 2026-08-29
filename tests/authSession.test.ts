@@ -6,7 +6,11 @@ import {
   signInWithEmail,
   signOutUser,
 } from '../src/lib/authSession'
-import { reduceAuthState, type AuthSessionState } from '../src/hooks/useAuthSession'
+import {
+  reduceAuthState,
+  shouldBootstrapProfile,
+  type AuthSessionState,
+} from '../src/hooks/useAuthSession'
 import type { Database } from '../src/types/database.types'
 
 const fakeSession = { user: { id: 'synthetic-user' } } as Session
@@ -68,6 +72,32 @@ describe('minimal auth session boundary', () => {
     expect(state.status).toBe('authenticated')
     expect(state.session).toBe(fakeSession)
     expect(state.errorMessage).toBeNull()
+  })
+
+  it('keeps an authenticated local session when deferred remote bootstrap reports an error', () => {
+    const authenticated: AuthSessionState = {
+      status: 'authenticated',
+      session: fakeSession,
+      busy: false,
+      errorMessage: null,
+      notice: null,
+    }
+
+    const state = reduceAuthState(authenticated, {
+      type: 'error',
+      message: 'Signed in, but profile bootstrap failed.',
+    })
+
+    expect(state.status).toBe('authenticated')
+    expect(state.session).toBe(fakeSession)
+    expect(state.errorMessage).toBe('Signed in, but profile bootstrap failed.')
+  })
+
+  it('defers profile bootstrap for an offline authenticated session and permits it once effective online returns', () => {
+    expect(shouldBootstrapProfile(false, 'authenticated', fakeSession)).toBe(false)
+    expect(shouldBootstrapProfile(false, 'authenticated', fakeSession)).toBe(false)
+    expect(shouldBootstrapProfile(true, 'authenticated', fakeSession)).toBe(true)
+    expect(shouldBootstrapProfile(true, 'signed-out', null)).toBe(false)
   })
 
   it('shows a safe sign-in error without reflecting sensitive details', async () => {
