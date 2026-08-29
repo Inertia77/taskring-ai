@@ -3,7 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { SupabaseHealth } from '../lib/supabaseHealth'
 import { BottomNavigation } from '../components/navigation/BottomNavigation'
 import { NetworkStatus } from '../components/NetworkStatus'
-import { useNetworkStatus } from '../hooks/useNetworkStatus'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -90,6 +89,7 @@ export function AuthenticatedAppShellView({
 
 interface AuthenticatedAppShellProps {
   userId: string
+  online: boolean
   supabaseHealth: SupabaseHealth
   busy: boolean
   authErrorMessage: string | null
@@ -98,13 +98,13 @@ interface AuthenticatedAppShellProps {
 
 export function AuthenticatedAppShell({
   userId,
+  online,
   supabaseHealth,
   busy,
   authErrorMessage,
   onSignOut,
 }: AuthenticatedAppShellProps) {
   const router = useAppRouter()
-  const online = useNetworkStatus()
   const queryClient = useQueryClient()
   const offlineRepository = useMemo(() => getDefaultOfflineRepository(), [])
   const dailyPlanRepository = useMemo(() => {
@@ -161,7 +161,7 @@ export function AuthenticatedAppShell({
     return syncEngine.syncNow(force)
   }, [syncEngine])
 
-  // Covers authenticated startup and every browser offline -> online transition.
+  // Covers authenticated startup and every effective offline -> online transition.
   useOutboxAutoSync(online, syncEngine)
 
   useEffect(() => {
