@@ -26,15 +26,16 @@ export function useEffectiveConnectivity({
   retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
 }: EffectiveConnectivityOptions = {}): EffectiveConnectivity {
   const configured = Boolean(projectUrl && publishableKey)
+  const probeAvailable = configured && typeof fetchImpl === 'function'
   const retrySchedule = retryDelaysMs.length > 0 ? retryDelaysMs.join(',') : ''
   const [supabaseHealth, setSupabaseHealth] = useState<SupabaseHealth>(() => {
     if (!configured) return 'not-configured'
-    return browserOnline() ? 'checking' : 'offline'
+    if (!probeAvailable || !browserOnline()) return 'offline'
+    return 'checking'
   })
 
   useEffect(() => {
-    if (!configured || !projectUrl || !publishableKey || typeof fetchImpl !== 'function') {
-      setSupabaseHealth(configured ? 'offline' : 'not-configured')
+    if (!probeAvailable || !projectUrl || !publishableKey || typeof fetchImpl !== 'function') {
       return
     }
 
@@ -164,10 +165,7 @@ export function useEffectiveConnectivity({
     }
 
     if (browserOnline()) {
-      setSupabaseHealth('checking')
       void probe()
-    } else {
-      markOffline()
     }
 
     return () => {
@@ -184,7 +182,7 @@ export function useEffectiveConnectivity({
         document.removeEventListener('visibilitychange', handleVisibility)
       }
     }
-  }, [configured, fetchImpl, projectUrl, publishableKey, retrySchedule])
+  }, [fetchImpl, probeAvailable, projectUrl, publishableKey, retrySchedule])
 
   return {
     online: supabaseHealth === 'online',
