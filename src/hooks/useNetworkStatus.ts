@@ -39,6 +39,9 @@ export function useEffectiveConnectivity({
       return
     }
 
+    const healthProjectUrl = projectUrl
+    const healthPublishableKey = publishableKey
+    const healthFetch = fetchImpl
     const normalizedRetryDelays = retrySchedule
       ? retrySchedule
           .split(',')
@@ -99,7 +102,7 @@ export function useEffectiveConnectivity({
       const generation = ++probeGeneration
 
       try {
-        const healthy = await checkSupabaseHealth(projectUrl, publishableKey, fetchImpl)
+        const healthy = await checkSupabaseHealth(healthProjectUrl, healthPublishableKey, healthFetch)
         if (!active || generation !== probeGeneration) return
 
         if (!browserOnline()) {
