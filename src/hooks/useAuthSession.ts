@@ -72,7 +72,15 @@ const unconfiguredInitialState: AuthSessionState = {
   notice: null,
 }
 
-export function useAuthSession() {
+export function shouldBootstrapProfile(
+  effectiveOnline: boolean,
+  status: AuthStatus,
+  session: Session | null,
+) {
+  return effectiveOnline && status === 'authenticated' && Boolean(session)
+}
+
+export function useAuthSession(effectiveOnline = true) {
   const [state, dispatch] = useReducer(
     reduceAuthState,
     isSupabaseConfigured ? configuredInitialState : unconfiguredInitialState,
@@ -107,7 +115,7 @@ export function useAuthSession() {
   }, [])
 
   useEffect(() => {
-    if (!supabase || state.status !== 'authenticated' || !state.session) {
+    if (!supabase || !shouldBootstrapProfile(effectiveOnline, state.status, state.session) || !state.session) {
       return
     }
 
@@ -121,7 +129,7 @@ export function useAuthSession() {
     return () => {
       active = false
     }
-  }, [state.session, state.status])
+  }, [effectiveOnline, state.session, state.status])
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) return
