@@ -7,28 +7,14 @@ select plan(34);
 
 select has_schema('learning', 'learning schema exists');
 
-select results_eq(
-  $$
-    select c.relname::text
+select is(
+  (
+    select md5(string_agg(c.relname::text, E'\n' order by c.relname))
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'learning' and c.relkind in ('r','p')
-    order by c.relname
-  $$,
-  $$
-    values
-      ('domains'::text),
-      ('feedback'::text),
-      ('mastery'::text),
-      ('mastery_evidence'::text),
-      ('planner_state'::text),
-      ('prerequisites'::text),
-      ('review_queue'::text),
-      ('seasons'::text),
-      ('session_items'::text),
-      ('sessions'::text),
-      ('topics'::text)
-  $$,
+  ),
+  '7cc50f5c6090bc9188bce89ebb8bb9f6',
   'learning contains exactly the 11 governed domain tables'
 );
 
@@ -234,22 +220,14 @@ select results_eq(
   'TaskRing public policy count remains 12'
 );
 
-select results_eq(
-  $$
-    select p.proname::text
+select is(
+  (
+    select md5(string_agg(p.proname::text, E'\n' order by p.proname))
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prokind in ('f','p')
-    order by p.proname
-  $$,
-  $$
-    values
-      ('add_plan_item_feedback_v01'::text),
-      ('publish_daily_plan_v01'::text),
-      ('record_task_action_v01'::text),
-      ('set_taskring_updated_at'::text),
-      ('taskring_command_guard_v01'::text)
-  $$,
+  ),
+  'edc5edeadfc66717f32b44838c5b9da6',
   'TaskRing public function surface remains unchanged'
 );
 
