@@ -107,6 +107,34 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
       result: { inbox_item_id: captureId, created: false },
     })
 
+    const replayWithDifferentInterpretation = await invokeSecretary(tokenA, {
+      ...request,
+      interpretation: {
+        kind: 'reference',
+        payload: { title: 'Changed retry interpretation' },
+        confidence: 0.1,
+        needs_review: false,
+      },
+    })
+    expect(replayWithDifferentInterpretation.status).toBe(200)
+    expect(await replayWithDifferentInterpretation.json()).toEqual({
+      ok: true,
+      result: { inbox_item_id: captureId, created: false },
+    })
+
+    const { data: afterReplay, error: afterReplayError } = await userAClient
+      .from('inbox_items')
+      .select('interpreted_kind,interpreted_payload,confidence,needs_review')
+      .eq('id', captureId)
+      .single()
+    expect(afterReplayError).toBeNull()
+    expect(afterReplay).toEqual({
+      interpreted_kind: 'task',
+      interpreted_payload: { title: 'Private test task' },
+      confidence: 0.75,
+      needs_review: true,
+    })
+
     const conflict = await invokeSecretary(tokenA, captureRequest(captureId, 'Different raw capture.'))
     expect(conflict.status).toBe(409)
     expect(await conflict.json()).toEqual({
