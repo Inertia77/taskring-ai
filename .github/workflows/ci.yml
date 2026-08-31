@@ -148,6 +148,8 @@ jobs:
           test -f supabase/config.toml
           test -d supabase/migrations
           test -d supabase/functions
+          test -f supabase/functions/secretary-api/index.ts
+          test -f supabase/functions/secretary-api/contract.ts
           test -d supabase/tests
           test -f supabase/seed.sql
           grep -F 'site_url = "http://localhost:5173"' supabase/config.toml
@@ -165,7 +167,24 @@ jobs:
       - name: Lint local database
         run: pnpm exec supabase db lint --level error --schema public
 
-      - name: Real Auth, Data API, Daily Plan, Execution, and Offline Outbox integration
+      - name: Start local Secretary API
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec supabase functions serve secretary-api > /tmp/secretary-api.log 2>&1 &
+          echo "$!" > /tmp/secretary-api.pid
+          for attempt in $(seq 1 45); do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST http://127.0.0.1:54321/functions/v1/secretary-api || true)"
+            if [ "$status" = "401" ]; then
+              echo "Secretary API ready with unauthenticated requests rejected."
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/secretary-api.log
+          exit 1
+
+      - name: Real Auth, Data API, Secretary, Daily Plan, Execution, and Offline Outbox integration
         shell: bash
         run: |
           set -euo pipefail
@@ -180,7 +199,7 @@ jobs:
           test -n "$api_url"
           test -n "$publishable_key"
           VITE_SUPABASE_URL="$api_url" VITE_SUPABASE_PUBLISHABLE_KEY="$publishable_key" \
-            pnpm exec vitest run tests/authDataApi.integration.test.ts tests/dailyPlanRpc.integration.test.ts tests/executionRpc.integration.test.ts tests/offlineSync.integration.test.ts
+            pnpm exec vitest run tests/authDataApi.integration.test.ts tests/secretaryApi.integration.test.ts tests/dailyPlanRpc.integration.test.ts tests/executionRpc.integration.test.ts tests/offlineSync.integration.test.ts
 
       - name: Verify generated database types are current
         shell: bash
@@ -192,4 +211,9 @@ jobs:
 
       - name: Stop local Supabase
         if: always()
-        run: pnpm exec supabase stop --no-backup
+        shell: bash
+        run: |
+          if [ -f /tmp/secretary-api.pid ]; then
+            kill "$(cat /tmp/secretary-api.pid)" 2>/dev/null || true
+          fi
+          pnpm exec supabase stop --no-backup
