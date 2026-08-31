@@ -48,10 +48,11 @@ describe('Secretary API contract', () => {
       message: 'interpretation.confidence must be between 0 and 1.',
     })
 
-    const badPayload = validRequest() as ReturnType<typeof validRequest> & {
-      interpretation: ReturnType<typeof validRequest>['interpretation'] & { payload: unknown }
+    const base = validRequest()
+    const badPayload = {
+      ...base,
+      interpretation: { ...base.interpretation, payload: [] },
     }
-    badPayload.interpretation.payload = []
     expect(parseSecretaryRequest(badPayload)).toEqual({
       ok: false,
       message: 'interpretation.payload must be an object.',
