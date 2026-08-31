@@ -33,22 +33,6 @@ function isBearerHeader(value: string | null): value is string {
   return Boolean(value && /^Bearer\s+\S+$/i.test(value))
 }
 
-function jsonEquals(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false
-    return left.every((value, index) => jsonEquals(value, right[index]))
-  }
-  if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null) return false
-
-  const leftRecord = left as Record<string, unknown>
-  const rightRecord = right as Record<string, unknown>
-  const leftKeys = Object.keys(leftRecord).sort()
-  const rightKeys = Object.keys(rightRecord).sort()
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key, index) => key === rightKeys[index] && jsonEquals(leftRecord[key], rightRecord[key]))
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders })
@@ -170,7 +154,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: existing, error: existingError } = await supabase
     .from('inbox_items')
-    .select('id,raw_input,source_type,source_external_id,interpreted_kind,interpreted_payload,confidence,needs_review,disposition')
+    .select('id,raw_input,source_type,source_external_id')
     .eq('id', capture.idempotencyKey)
     .maybeSingle()
 
@@ -185,12 +169,7 @@ Deno.serve(async (req: Request) => {
     existing &&
     existing.raw_input === capture.rawInput &&
     existing.source_type === capture.sourceType &&
-    existing.source_external_id === capture.sourceExternalId &&
-    existing.interpreted_kind === capture.interpretedKind &&
-    jsonEquals(existing.interpreted_payload, capture.interpretedPayload) &&
-    existing.confidence === capture.confidence &&
-    existing.needs_review === capture.needsReview &&
-    existing.disposition === 'pending'
+    existing.source_external_id === capture.sourceExternalId
   ) {
     return jsonResponse(200, {
       ok: true,
