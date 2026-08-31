@@ -104,11 +104,13 @@ The caller-provided UUID is written as `inbox_items.id`.
 
 This reuses the existing primary key as a durable idempotency key without adding another table or migration.
 
+The capture identity is the UUID plus the original evidence fields: `raw_input`, `source.type`, and `source.external_id`. Optional AI interpretation is deliberately not part of replay identity. The first accepted capture writes interpretation fields, but a later retry never overwrites them. This keeps capture replay stable even if a later workflow changes interpretation, review status, or disposition.
+
 Behavior:
 
 - first accepted request: `201`, `created: true`
 - replay with the same UUID and same capture identity: `200`, `created: false`
-- UUID collision with a different capture: `409 IDEMPOTENCY_CONFLICT`
+- UUID collision with different original evidence: `409 IDEMPOTENCY_CONFLICT`
 
 The existing primary key supplies concurrency safety: simultaneous attempts cannot create two rows with the same idempotency UUID.
 
