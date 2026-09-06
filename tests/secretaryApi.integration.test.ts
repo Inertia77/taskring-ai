@@ -171,5 +171,36 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
     const { data: spoofedRow, error: spoofedRowError } = await userAClient.from('inbox_items').select('id').eq('id', spoofId)
     expect(spoofedRowError).toBeNull()
     expect(spoofedRow).toEqual([])
+
+    // WP010: governed capture -> read -> correction -> capture replay.
+    const chatId = crypto.randomUUID()
+    const interpretation = { kind: 'task', confidence: 0.2, needs_review: false,
+      payload: { protocol: 'taskring.chat.v0.1', title: 'Synthetic report', summary: 'Review a synthetic report.', assumptions: [], questions: [] } }
+    const chatRequest = { operation: 'capture_chat_input', idempotency_key: chatId,
+      raw_input: '  Synthetic report review.  ', source: { type: 'chat' }, interpretation }
+    expect((await invokeSecretary(tokenA, chatRequest)).status).toBe(201)
+    const get = { operation: 'get_inbox_item', inbox_item_id: chatId }
+    const captured = (await (await invokeSecretary(tokenA, get)).json()).result.item
+    expect(captured.raw_input).toBe(chatRequest.raw_input)
+    expect(captured.needs_review).toBe(true)
+    expect(captured).not.toHaveProperty('user_id')
+    expect((await invokeSecretary(tokenB, get)).status).toBe(404)
+    const expected = { interpreted_kind: captured.interpreted_kind, interpreted_payload: captured.interpreted_payload,
+      confidence: captured.confidence, needs_review: captured.needs_review }
+    const review = { operation: 'review_inbox_item', inbox_item_id: chatId, expected,
+      interpretation: { ...interpretation, confidence: 1, payload: { ...interpretation.payload, title: 'Corrected synthetic report' } } }
+    expect((await invokeSecretary(tokenB, review)).status).toBe(409)
+    const correction = await invokeSecretary(tokenA, review)
+    expect(correction.status).toBe(200)
+    expect((await correction.json()).result.item.needs_review).toBe(false)
+    expect((await invokeSecretary(tokenA, review)).status).toBe(409)
+    expect((await invokeSecretary(tokenA, chatRequest)).status).toBe(200)
+    const afterCorrection = (await (await invokeSecretary(tokenA, get)).json()).result.item
+    expect(afterCorrection.interpreted_payload.title).toBe('Corrected synthetic report')
+    expect(afterCorrection.raw_input).toBe(chatRequest.raw_input)
+    const ownList = (await (await invokeSecretary(tokenA, { operation: 'list_inbox_items' })).json()).result.items
+    expect(ownList.some((item: { id: string }) => item.id === chatId)).toBe(true)
+    const otherList = (await (await invokeSecretary(tokenB, { operation: 'list_inbox_items' })).json()).result.items
+    expect(otherList).toEqual([])
   })
 })

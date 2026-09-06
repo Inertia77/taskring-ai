@@ -152,7 +152,8 @@ export function parseSecretaryRequest(input: unknown): ParseResult {
       interpretedKind,
       interpretedPayload,
       confidence,
-      needsReview,
+      needsReview: needsReview || (input.source.type === 'chat' &&
+        (confidence === null || confidence < 0.8 || interpretedKind === null || interpretedKind === 'unknown')),
     },
   }
 }

@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4'
 import { parseSecretaryRequest } from './contract.ts'
+import { parseChatOperation } from './chat-contract.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -88,8 +89,10 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const parsed = parseSecretaryRequest(requestBody)
-  if (!parsed.ok) {
+  const chat = parseChatOperation(requestBody)
+  const parsed = parseSecretaryRequest(chat.ok && chat.value.operation === 'capture_chat_input'
+    ? { ...chat.value, operation: 'capture_inbox_item' } : requestBody)
+  if (!parsed.ok && !chat.ok) {
     return jsonResponse(400, {
       ok: false,
       error: { code: 'INVALID_REQUEST', message: parsed.message },
@@ -118,6 +121,36 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  if (chat.ok && chat.value.operation !== 'capture_chat_input') {
+    const command = chat.value
+    const columns = 'id,raw_input,source_type,source_external_id,interpreted_kind,interpreted_payload,confidence,needs_review,disposition,created_at'
+    if (command.operation === 'list_inbox_items') {
+      const { data, error } = await supabase.from('inbox_items').select(columns)
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .range(command.offset, command.offset + 49)
+      return error ? jsonResponse(500, { ok: false, error: { code: 'DATABASE_ERROR', message: 'Inbox read failed.' } })
+        : jsonResponse(200, { ok: true, result: { items: data, next_offset: data.length === 50 && command.offset < 10000 ? command.offset + 50 : null } })
+    }
+    if (command.operation === 'get_inbox_item') {
+      const { data, error } = await supabase.from('inbox_items').select(columns).eq('id', command.inbox_item_id).maybeSingle()
+      if (error) return jsonResponse(500, { ok: false, error: { code: 'DATABASE_ERROR', message: 'Inbox read failed.' } })
+      return data ? jsonResponse(200, { ok: true, result: { item: data } })
+        : jsonResponse(404, { ok: false, error: { code: 'NOT_FOUND', message: 'Inbox item unavailable.' } })
+    }
+    const e = command.expected
+    const i = command.interpretation
+    let update = supabase.from('inbox_items').update({ interpreted_kind: i.kind,
+      interpreted_payload: i.payload, confidence: i.confidence, needs_review: i.needs_review })
+      .eq('id', command.inbox_item_id).eq('disposition', 'pending')
+      .eq('interpreted_payload', JSON.stringify(e.interpreted_payload)).eq('needs_review', e.needs_review)
+    update = e.interpreted_kind === null ? update.is('interpreted_kind', null) : update.eq('interpreted_kind', e.interpreted_kind)
+    update = e.confidence === null ? update.is('confidence', null) : update.eq('confidence', e.confidence)
+    const { data, error } = await update.select(columns).maybeSingle()
+    if (error) return jsonResponse(500, { ok: false, error: { code: 'DATABASE_ERROR', message: 'Inbox review failed.' } })
+    return data ? jsonResponse(200, { ok: true, result: { item: data } })
+      : jsonResponse(409, { ok: false, error: { code: 'REVIEW_CONFLICT', message: 'Reload this item before reviewing.' } })
+  }
+  if (!parsed.ok) return jsonResponse(400, { ok: false, error: { code: 'INVALID_REQUEST', message: parsed.message } })
   const capture = parsed.value
   const row = {
     id: capture.idempotencyKey,

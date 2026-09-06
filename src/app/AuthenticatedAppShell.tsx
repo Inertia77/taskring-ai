@@ -48,7 +48,7 @@ export function AuthenticatedAppShellView({
 
   const page = {
     today: <TodayPage userId={userId} online={online} offlineRepository={offlineRepository} syncNow={syncNow} />,
-    inbox: <InboxPage />,
+    inbox: <InboxPage key={userId} userId={userId} online={online} />,
     tasks: <TasksPage userId={userId} online={online} />,
     history: <HistoryPage userId={userId} online={online} offlineRepository={offlineRepository} syncNow={syncNow} />,
     settings: (
@@ -166,6 +166,7 @@ export function AuthenticatedAppShell({
 
   useEffect(() => {
     return () => {
+      queryClient.removeQueries({ queryKey: ['inbox', userId] })
       queryClient.removeQueries({ queryKey: managementQueryKeys.root(userId) })
       queryClient.removeQueries({ queryKey: todayQueryKeys.root(userId) })
       queryClient.removeQueries({ queryKey: historyQueryKeys.root(userId) })
