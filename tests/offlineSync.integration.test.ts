@@ -1,3 +1,4 @@
+import { hasLocalSupabase } from './localIntegrationGuard'
 import 'fake-indexeddb/auto'
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
@@ -11,7 +12,7 @@ import type { Database } from '../src/types/database.types'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-const hasLocalAuth = Boolean(url && publishableKey)
+const hasLocalAuth = hasLocalSupabase(url, publishableKey)
 
 function localClient() {
   if (!url || !publishableKey) throw new Error('Local Supabase integration env is missing')
