@@ -1,3 +1,4 @@
+import { calculateCalibration } from './calibration.ts'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.4'
 import type { ReplanningRequest } from './replanning-contract.ts'
 import { type PlanningContext, type PlanningRequest, type Row, validateProposal } from './planning-contract.ts'
@@ -47,7 +48,7 @@ export async function handlePlanning(db: SupabaseClient, command: PlanningReques
     const date = command.operation === 'get_planning_context' ? command.plan_date : command.proposal.plan_date
     const context = await planningContext(db, date)
     const token = await contextToken(context)
-    if (command.operation === 'get_planning_context') return { status: 200, body: { ok: true, result: { context, context_token: token,
+    if (command.operation === 'get_planning_context') return { status: 200, body: { ok: true, result: { context, calibration: calculateCalibration(context), context_token: token,
       policy: { workday_block: '09:00-18:00', main_quest_workday_max: 1, default_buffer_percent: 20,
         carryover: 'explicit decision only', history_days: 30, recurrence: 'rules supplied as evidence; never automatically expanded' } } } }
     const p = command.proposal

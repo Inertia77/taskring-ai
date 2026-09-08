@@ -47,7 +47,7 @@ const captureRequest = (idempotencyKey: string, rawInput = 'Capture this private
 })
 
 describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox', () => {
-  it('enforces authentication, ownership, validation, and idempotency', async () => {
+  it('proves capture, human resolution, planning, execution, replan and calibration with two-user isolation', async () => {
     const userAClient = localClient()
     const userBClient = localClient()
     const suffix = crypto.randomUUID()
@@ -207,8 +207,11 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
     // WP011: real caller context -> validate -> publish -> stale retry and isolation.
     const taskId = crypto.randomUUID()
     expect((await userAClient.from('tasks').insert({ id: taskId, user_id: userAId,
-      title: 'Synthetic planning task', status: 'active', task_kind: 'normal',
+      title: afterCorrection.interpreted_payload.title, status: 'active', task_kind: 'normal',
       execution_context: 'any', created_by: 'user' })).error).toBeNull()
+    // Explicit human-approved resolution uses the normal owner Data API, not automatic AI task creation.
+    expect((await userAClient.from('inbox_items').update({disposition:'accepted',resolved_at:'2026-09-08T00:00:00Z'}).eq('id',chatId)).error).toBeNull()
+    expect((await userAClient.from('source_links').insert({user_id:userAId,task_id:taskId,source_type:'chat',external_id:chatId})).error).toBeNull()
     const contextRequest = { operation: 'get_planning_context', plan_date: '2026-09-08' }
     const planningResponse = await invokeSecretary(tokenA, contextRequest)
     expect(planningResponse.status).toBe(200)
@@ -264,6 +267,30 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
       expected_state:'partial',action:'done',occurred_at:'2026-09-08T20:00:00Z',actual_minutes:30})).status).toBe(200)
     expect((await userAClient.from('daily_plan_items').select('current_state').eq('id',oldItem.id).single()).data?.current_state).toBe('partial')
 
+    // WP013: visible evidence -> correction -> planning context -> delete calibration.
+    const history = await invokeSecretary(tokenA,{operation:'get_execution_history',plan_date:'2026-09-08'})
+    expect(history.status).toBe(200)
+    expect((await history.json()).result.plans).toHaveLength(2)
+    const calibrationRequest={operation:'get_calibration',plan_date:'2026-09-08'}
+    const calibration=(await (await invokeSecretary(tokenA,calibrationRequest)).json()).result
+    expect(calibration.calibration.sample_count).toBe(1)
+    expect(calibration.calibration.duration_ratio).toBeNull()
+    expect(calibration.calibration.evidence[0].actual_minutes).toBe(70)
+    const settings={enabled:true,excluded_event_ids:[],corrections:[{event_id:partialId,actual_minutes:20,reason:'Synthetic correction of timer entry'}]}
+    const change={operation:'set_calibration_settings',plan_date:'2026-09-08',expected_token:calibration.settings_token,settings}
+    expect((await invokeSecretary(tokenA,change)).status).toBe(200)
+    expect((await invokeSecretary(tokenA,change)).status).toBe(409)
+    const correctedContext=(await (await invokeSecretary(tokenA,contextRequest)).json()).result
+    expect(correctedContext.calibration.evidence[0].actual_minutes).toBe(50)
+    expect((await userAClient.from('task_events').select('actual_minutes').eq('id',partialId).single()).data?.actual_minutes).toBe(40)
+    const otherCalibration=(await (await invokeSecretary(tokenB,calibrationRequest)).json()).result
+    expect(otherCalibration.calibration.sample_count).toBe(0)
+    expect((await invokeSecretary(tokenB,{...change,expected_token:otherCalibration.settings_token})).status).toBe(422)
+    const freshCalibration=(await (await invokeSecretary(tokenA,calibrationRequest)).json()).result
+    expect((await invokeSecretary(tokenA,{...change,expected_token:freshCalibration.settings_token,settings:{enabled:false,excluded_event_ids:[],corrections:[]}})).status).toBe(200)
+    expect((await (await invokeSecretary(tokenA,calibrationRequest)).json()).result.calibration.enabled).toBe(false)
 
-  })
+
+
+  }, 30_000)
 })
