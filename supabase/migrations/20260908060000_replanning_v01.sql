@@ -399,9 +399,9 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_user::text||':'||v_date::text,0));
   select * into v_current from public.daily_plans where user_id=v_user and plan_date=v_date and status='active' for update;
   if v_current.id is distinct from v_base then raise exception using errcode='P0001',message='Plan changed.'; end if;
-  perform 1 from public.daily_plan_items where user_id=v_user and plan_id=v_base order by id for update;
+  perform 1 from public.daily_plan_items where user_id=v_user and public.daily_plan_items.plan_id=v_base order by id for update;
   select coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('id',id,'current_state',current_state,'updated_at',updated_at) order by id),'[]'::jsonb)
-    into v_actual from public.daily_plan_items where user_id=v_user and plan_id=v_base;
+    into v_actual from public.daily_plan_items where user_id=v_user and public.daily_plan_items.plan_id=v_base;
   select coalesce(pg_catalog.jsonb_agg(x order by x->>'id'),'[]'::jsonb) into v_expected from pg_catalog.jsonb_array_elements(p_request->'expected_items') x;
   if v_actual is distinct from v_expected then raise exception using errcode='P0001',message='Execution changed.'; end if;
 
@@ -423,7 +423,7 @@ begin
       raise exception using errcode='P0001',message='Carryover decision and selected task disagree.';
     end if;
   end loop;
-  if exists(select 1 from public.daily_plan_items where user_id=v_user and plan_id=v_base and current_state not in ('done','cancelled') and not(id=any(v_sources))) then
+  if exists(select 1 from public.daily_plan_items where user_id=v_user and public.daily_plan_items.plan_id=v_base and current_state not in ('done','cancelled') and not(id=any(v_sources))) then
     raise exception using errcode='P0001',message='Every unfinished base item requires a decision.';
   end if;
 
