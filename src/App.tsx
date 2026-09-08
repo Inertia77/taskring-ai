@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { AuthenticatedAppShell } from './app/AuthenticatedAppShell'
+import { ReleaseCheck } from './features/settings/ReleaseCheck'
 import { AuthScreen } from './components/AuthScreen'
 import { useAuthSession, type AuthSessionState } from './hooks/useAuthSession'
 import { useEffectiveConnectivity } from './hooks/useNetworkStatus'
@@ -11,6 +13,7 @@ export interface AppViewAuth extends AuthSessionState {
 }
 
 export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseHealth: SupabaseHealth }) {
+  const [releaseCheckClosed, setReleaseCheckClosed] = useState(false)
   if (auth.status === 'loading') {
     return (
       <main className="auth-page">
@@ -33,6 +36,10 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
         onSignUp={auth.signUp}
       />
     )
+  }
+
+  if (import.meta.env.VITE_RELEASE_CHECK === 'wp010-20260908' && !releaseCheckClosed && supabaseHealth === 'online') {
+    return <ReleaseCheck key={auth.session.user.id} userId={auth.session.user.id} onClose={() => setReleaseCheckClosed(true)} />
   }
 
   return (
