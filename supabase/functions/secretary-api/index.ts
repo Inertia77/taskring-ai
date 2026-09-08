@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.4'
 import { parseSecretaryRequest } from './contract.ts'
 import { parseChatOperation } from './chat-contract.ts'
+import { parsePlanningRequest } from './planning-contract.ts'
+import { handlePlanning } from './planning-service.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -89,10 +91,11 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  const planning = parsePlanningRequest(requestBody)
   const chat = parseChatOperation(requestBody)
   const parsed = parseSecretaryRequest(chat.ok && chat.value.operation === 'capture_chat_input'
     ? { ...chat.value, operation: 'capture_inbox_item' } : requestBody)
-  if (!parsed.ok && !chat.ok) {
+  if (!parsed.ok && !chat.ok && !planning) {
     return jsonResponse(400, {
       ok: false,
       error: { code: 'INVALID_REQUEST', message: parsed.message },
@@ -119,6 +122,11 @@ Deno.serve(async (req: Request) => {
       ok: false,
       error: { code: 'UNAUTHENTICATED', message: 'Authentication required.' },
     })
+  }
+
+  if (planning) {
+    const response = await handlePlanning(supabase, planning)
+    return jsonResponse(response.status, response.body)
   }
 
   if (chat.ok && chat.value.operation !== 'capture_chat_input') {

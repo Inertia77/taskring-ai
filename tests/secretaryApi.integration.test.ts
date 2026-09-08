@@ -203,5 +203,34 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
     expect(ownList.some((item: { id: string }) => item.id === chatId)).toBe(true)
     const otherList = (await (await invokeSecretary(tokenB, { operation: 'list_inbox_items' })).json()).result.items
     expect(otherList).toEqual([])
+
+    // WP011: real caller context -> validate -> publish -> stale retry and isolation.
+    const taskId = crypto.randomUUID()
+    expect((await userAClient.from('tasks').insert({ id: taskId, user_id: userAId,
+      title: 'Synthetic planning task', status: 'active', task_kind: 'normal',
+      execution_context: 'any', created_by: 'user' })).error).toBeNull()
+    const contextRequest = { operation: 'get_planning_context', plan_date: '2026-09-08' }
+    const planningResponse = await invokeSecretary(tokenA, contextRequest)
+    expect(planningResponse.status).toBe(200)
+    const planning = (await planningResponse.json()).result
+    expect(planning.context.tasks.some((t: {id:string}) => t.id === taskId)).toBe(true)
+    expect(planning.context.tasks[0]).not.toHaveProperty('user_id')
+    const otherPlanning = (await (await invokeSecretary(tokenB, contextRequest)).json()).result
+    expect(otherPlanning.context.tasks).toEqual([])
+    const proposal = { plan_date: '2026-09-08', context_token: planning.context_token,
+      base_plan_id: null, capacity_minutes: 120, buffer_percent: 20, buffer_reason: null,
+      brief: 'Synthetic deliberate selection within capacity', items: [{ task_id: taskId,
+        bucket: 'must', start_minute: 1140, planned_minutes: 60, reason: 'Synthetic priority',
+        interruptible: false, low_risk: true }] }
+    expect((await invokeSecretary(tokenA, { operation: 'validate_plan_proposal', proposal })).status).toBe(200)
+    expect((await invokeSecretary(tokenB, { operation: 'publish_plan_proposal', proposal: { ...proposal, context_token: otherPlanning.context_token } })).status).toBe(422)
+    const published = await invokeSecretary(tokenA, { operation: 'publish_plan_proposal', proposal })
+    expect(published.status).toBe(201)
+    const publication = (await published.json()).result.publication[0]
+    expect(publication.revision).toBe(1)
+    expect((await invokeSecretary(tokenA, { operation: 'publish_plan_proposal', proposal })).status).toBe(409)
+    const planRead = await userAClient.from('daily_plans').select('capacity_breakdown').eq('id', publication.plan_id).single()
+    expect(planRead.data?.capacity_breakdown).toMatchObject({ context_token: planning.context_token, buffer_percent: 20 })
+
   })
 })
