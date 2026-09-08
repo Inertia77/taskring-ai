@@ -1,6 +1,7 @@
 import { hasLocalSupabase } from './localIntegrationGuard'
 import { createClient } from '@supabase/supabase-js'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { startCoreSmoke } from '../src/data/secretary/coreSmoke'
 import type { Database } from '../src/types/database.types'
 
 const url = import.meta.env.VITE_SUPABASE_URL
@@ -289,6 +290,15 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
     const freshCalibration=(await (await invokeSecretary(tokenA,calibrationRequest)).json()).result
     expect((await invokeSecretary(tokenA,{...change,expected_token:freshCalibration.settings_token,settings:{enabled:false,excluded_event_ids:[],corrections:[]}})).status).toBe(200)
     expect((await (await invokeSecretary(tokenA,calibrationRequest)).json()).result.calibration.enabled).toBe(false)
+    // Run the exact browser acceptance harness against real local Auth/Edge/RLS before shipping it.
+    vi.stubGlobal('localStorage',{getItem:()=>null,setItem:()=>undefined})
+    try {
+      const smoke = await startCoreSmoke(userAClient,userAId)
+      expect(smoke.failed_check).toBeNull()
+      expect(smoke.status).toBe('passed')
+      expect(smoke.checks).toHaveLength(17)
+    } finally { vi.unstubAllGlobals() }
+
 
 
 
