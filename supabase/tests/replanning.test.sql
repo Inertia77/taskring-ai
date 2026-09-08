@@ -1,0 +1,11 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set local search_path=public,extensions;
+select plan(5);
+select ok(not has_function_privilege('anon','public.replan_daily_plan_v01(jsonb)','EXECUTE'),'anonymous cannot replan');
+select ok(not has_function_privilege('service_role','public.replan_daily_plan_v01(jsonb)','EXECUTE'),'privileged client not granted');
+select ok(has_function_privilege('authenticated','public.replan_daily_plan_v01(jsonb)','EXECUTE'),'authenticated replan granted');
+select results_eq($$select not prosecdef from pg_proc where oid='public.replan_daily_plan_v01(jsonb)'::regprocedure$$,$$values (true)$$,'replanning uses caller RLS');
+select results_eq($$select array_to_string(proconfig,',') = 'search_path=""' from pg_proc where oid='public.replan_daily_plan_v01(jsonb)'::regprocedure$$,$$values (true)$$,'empty search path');
+select * from finish();
+rollback;

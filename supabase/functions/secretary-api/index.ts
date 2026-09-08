@@ -3,6 +3,7 @@ import { parseSecretaryRequest } from './contract.ts'
 import { parseChatOperation } from './chat-contract.ts'
 import { parsePlanningRequest } from './planning-contract.ts'
 import { handlePlanning } from './planning-service.ts'
+import { parseReplanningRequest, parseExecutionRequest } from './replanning-contract.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -91,11 +92,12 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const planning = parsePlanningRequest(requestBody)
+  const planning = parsePlanningRequest(requestBody) ?? parseReplanningRequest(requestBody)
+  const execution = parseExecutionRequest(requestBody)
   const chat = parseChatOperation(requestBody)
   const parsed = parseSecretaryRequest(chat.ok && chat.value.operation === 'capture_chat_input'
     ? { ...chat.value, operation: 'capture_inbox_item' } : requestBody)
-  if (!parsed.ok && !chat.ok && !planning) {
+  if (!parsed.ok && !chat.ok && !planning && !execution) {
     return jsonResponse(400, {
       ok: false,
       error: { code: 'INVALID_REQUEST', message: parsed.message },
@@ -124,6 +126,13 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  if (execution) {
+    const { operation, ...fields } = execution
+    const args = Object.fromEntries(Object.entries(fields).map(([key,value])=>['p_'+key,value]))
+    const { data, error } = await supabase.rpc(operation === 'record_task_action' ? 'record_task_action_v01' : 'add_plan_item_feedback_v01', args)
+    return error ? jsonResponse(error.code === 'P0001' ? 409 : 500, { ok: false, error: { code: 'EXECUTION_CONFLICT', message: 'Refresh execution state before retrying.' } })
+      : jsonResponse(200, { ok: true, result: { receipt: data } })
+  }
   if (planning) {
     const response = await handlePlanning(supabase, planning)
     return jsonResponse(response.status, response.body)

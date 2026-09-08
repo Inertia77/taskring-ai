@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.112.4'
+import type { ReplanningRequest } from './replanning-contract.ts'
 import { type PlanningContext, type PlanningRequest, type Row, validateProposal } from './planning-contract.ts'
 
 const columns = {
@@ -41,7 +42,7 @@ export async function contextToken(context: PlanningContext) {
   return Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, '0')).join('')
 }
 const failure = (status: number, code: string) => ({ status, body: { ok: false, error: { code, message: 'Refresh planning context and review the proposal.' } } })
-export async function handlePlanning(db: SupabaseClient, command: PlanningRequest) {
+export async function handlePlanning(db: SupabaseClient, command: PlanningRequest | ReplanningRequest) {
   try {
     const date = command.operation === 'get_planning_context' ? command.plan_date : command.proposal.plan_date
     const context = await planningContext(db, date)
@@ -54,6 +55,21 @@ export async function handlePlanning(db: SupabaseClient, command: PlanningReques
     const errors = validateProposal(p, context)
     if (errors.length) return { status: 422, body: { ok: false, error: { code: 'INVALID_PLAN', message: 'Proposal violates planning policy.', violations: errors } } }
     if (command.operation === 'validate_plan_proposal') return { status: 200, body: { ok: true, result: { valid: true, context_token: token, planned_minutes: p.items.reduce((s,i) => s+i.planned_minutes, 0) } } }
+    if (command.operation === 'replan_daily_plan') {
+      const sourceIds = new Set(command.decisions.map(d => d.source_item_id))
+      const baseItems = context.items.filter(i => i.plan_id === p.base_plan_id)
+      if (baseItems.some(i => !['done','cancelled'].includes(String(i.current_state)) && !sourceIds.has(String(i.id)))) return failure(422, 'CARRYOVER_DECISION_REQUIRED')
+      for (const d of command.decisions) {
+        const source = context.items.find(i => i.id === d.source_item_id)
+        if (!source || ['done','cancelled'].includes(String(source.current_state)) ||
+            (d.decision === 'carry') !== p.items.some(i => i.task_id === source.task_id)) return failure(422, 'INVALID_CARRYOVER')
+      }
+      const { data, error } = await db.rpc('replan_daily_plan_v01', { p_request: { ...p, decisions: command.decisions,
+        expected_items: baseItems.map(i=>({id:i.id,current_state:i.current_state,updated_at:i.updated_at})),
+        expected_tasks: context.tasks.filter(t=>p.items.some(i=>i.task_id===t.id)).map(t=>({id:t.id,updated_at:t.updated_at})) } })
+      return error ? failure(error.code === 'P0001' ? 409 : 500, error.code === 'P0001' ? 'REPLAN_CONFLICT' : 'REPLAN_FAILED')
+        : { status: 201, body: { ok: true, result: { publication: data } } }
+    }
     const { data, error } = await db.rpc('publish_daily_plan_v01', { p_plan_date: date, p_base_plan_id: p.base_plan_id,
       p_items: p.items.map((i, position) => ({ task_id: i.task_id, bucket: i.bucket, position, planned_minutes: i.planned_minutes, reason: i.reason })),
       p_capacity_minutes: p.capacity_minutes, p_capacity_breakdown: { protocol: 'taskring.plan.v0.1', context_token: token,

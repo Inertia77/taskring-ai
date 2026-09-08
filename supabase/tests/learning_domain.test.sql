@@ -226,9 +226,10 @@ select is(
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prokind in ('f','p')
+      and p.proname <> 'replan_daily_plan_v01' -- WP012 extension tested separately
   ),
   'edc5edeadfc66717f32b44838c5b9da6',
-  'TaskRing public function surface remains unchanged'
+  'TaskRing baseline public function surface remains unchanged apart from tested WP012 extension'
 );
 
 select results_eq(

@@ -664,6 +664,13 @@ export type Database = {
           event_id: string
         }[]
       }
+      replan_daily_plan_v01: {
+        Args: { p_request: Json }
+        Returns: {
+          plan_id: string
+          revision: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

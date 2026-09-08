@@ -232,5 +232,38 @@ describe.skipIf(!hasLocalAuth)('real local Secretary API -> Auth -> RLS -> inbox
     const planRead = await userAClient.from('daily_plans').select('capacity_breakdown').eq('id', publication.plan_id).single()
     expect(planRead.data?.capacity_breakdown).toMatchObject({ context_token: planning.context_token, buffer_percent: 20 })
 
+    // WP012: partial/feedback -> explicit replan -> retained history -> finish.
+    const oldItem = (await userAClient.from('daily_plan_items').select('*').eq('plan_id', publication.plan_id).single()).data!
+    const partialId = crypto.randomUUID()
+    const partial = { operation: 'record_task_action', event_id: partialId, plan_item_id: oldItem.id,
+      expected_state: 'planned', action: 'partial', occurred_at: '2026-09-08T19:30:00Z',
+      progress_percent: 50, remaining_minutes: 30, actual_minutes: 40 }
+    expect((await invokeSecretary(tokenA, partial)).status).toBe(200)
+    expect((await invokeSecretary(tokenA, partial)).status).toBe(200)
+    expect((await invokeSecretary(tokenB, partial)).status).toBe(409)
+    expect((await invokeSecretary(tokenA, {operation:'add_plan_item_feedback',feedback_id:crypto.randomUUID(),plan_item_id:oldItem.id,content:'Synthetic interruption reduced capacity.'})).status).toBe(200)
+    const fresh=(await (await invokeSecretary(tokenA,contextRequest)).json()).result
+    const revised={...proposal,context_token:fresh.context_token,base_plan_id:publication.plan_id,capacity_minutes:60,
+      brief:'Synthetic time loss: retain only remaining work',items:[{...proposal.items[0],planned_minutes:30}]}
+    const replan={operation:'replan_daily_plan',proposal:revised,decisions:[{source_item_id:oldItem.id,decision:'carry',reason:'Still urgent and 30 remaining minutes fit buffered capacity'}]}
+    expect((await invokeSecretary(tokenA,{...replan,decisions:[]})).status).toBe(422)
+    const newPlanResponse=await invokeSecretary(tokenA,replan)
+    expect(newPlanResponse.status).toBe(201)
+    const newPlan=(await newPlanResponse.json()).result.publication[0]
+    expect(newPlan.revision).toBe(2)
+    expect((await invokeSecretary(tokenA,replan)).status).toBe(409)
+    const oldPlanRead=(await userAClient.from('daily_plans').select('status').eq('id',publication.plan_id).single()).data!
+    expect(oldPlanRead.status).toBe('superseded')
+    expect((await userAClient.from('task_events').select('id').eq('id',partialId)).data).toHaveLength(1)
+    const newItem=(await userAClient.from('daily_plan_items').select('*').eq('plan_id',newPlan.plan_id).single()).data!
+    expect(newItem.carryover_from_item_id).toBe(oldItem.id)
+    expect(newItem.current_state).toBe('partial')
+    // A queued action against an obsolete revision is a durable conflict, never silently retargeted.
+    expect((await invokeSecretary(tokenA,{...partial,event_id:crypto.randomUUID(),expected_state:'partial'})).status).toBe(409)
+    expect((await invokeSecretary(tokenA,{operation:'record_task_action',event_id:crypto.randomUUID(),plan_item_id:newItem.id,
+      expected_state:'partial',action:'done',occurred_at:'2026-09-08T20:00:00Z',actual_minutes:30})).status).toBe(200)
+    expect((await userAClient.from('daily_plan_items').select('current_state').eq('id',oldItem.id).single()).data?.current_state).toBe('partial')
+
+
   })
 })
