@@ -38,7 +38,7 @@ export function AppView({ auth, supabaseHealth }: { auth: AppViewAuth; supabaseH
     )
   }
 
-  if (import.meta.env.VITE_RELEASE_CHECK === 'wp010-20260908' && !releaseCheckClosed) {
+  if (import.meta.env.VITE_RELEASE_CHECK === 'wp010-20260908' && !releaseCheckClosed && supabaseHealth === 'online') {
     return <ReleaseCheck key={auth.session.user.id} userId={auth.session.user.id} onClose={() => setReleaseCheckClosed(true)} />
   }
 

@@ -32,6 +32,9 @@ credentials, emails, owner IDs, real task data or raw network error details. The
 agent can read back this receipt with a narrowly filtered management query; it must
 not fabricate success from deployment state or substitute management identity for the
 browser caller. In-browser completion is not claimed unless the receipt was saved.
+After API assertions pass, browser GET requests verify all five application deep links
+and an unknown nested route return the HTML application entry. These requests do not
+read task data and explicitly avoid the HTTP cache. The result is included in the receipt.
 
 The check is deduplicated within a browser page (including React strict effects), and
 successful completion is cached per user locally. A reload after an interrupted run

@@ -108,6 +108,19 @@ export function startProductionSmoke(client: SupabaseClient<Database>, userId: s
       return { status: data?.result?.created === true ? 201 : 200, body: data }
     }
     const report = await runProductionSmoke(invoke, runId)
+    if (report.status === 'passed') {
+      try {
+        for (const path of ['/today', '/inbox', '/tasks', '/history', '/settings', '/release-check/deep-link']) {
+          const response = await fetch(path, { headers: { Accept: 'text/html' }, cache: 'no-store', credentials: 'same-origin' })
+          if (!response.ok || !response.headers.get('content-type')?.includes('text/html') ||
+              !(await response.text()).includes('id="root"')) throw new Error('SPA fallback failed')
+        }
+        report.checks.push('spa_deep_link_fallback')
+      } catch {
+        report.status = 'failed'
+        report.failed_check = 'spa_deep_link_fallback'
+      }
+    }
     const receipt = await invoke({ operation: 'capture_chat_input', idempotency_key: crypto.randomUUID(),
       raw_input: 'SYNTHETIC TaskRing release verification receipt. No personal data.',
       source: { type: 'chat', external_id: smokeReportSource },
