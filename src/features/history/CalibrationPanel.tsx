@@ -21,7 +21,7 @@ export function CalibrationPanel({userId,online}:{userId:string;online:boolean})
       await query.refetch();setMessage('Calibration preference saved. Original history is preserved.')
     }catch(e){setMessage(e instanceof Error?e.message:'Save failed.')}finally{setBusy(false)}
   }
-  const c=query.data?.calibration
+  const c=query.isError?undefined:query.data?.calibration
   return <section className="history-pending-section" aria-label="Execution calibration">
     <h2>Execution calibration</h2>
     {!online?<p>Reconnect to recompute calibration from saved history.</p>:query.isPending?<p>Reading evidence…</p>:null}
