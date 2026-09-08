@@ -75,3 +75,7 @@
     flex-direction: column;
   }
 }
+
+/* Long provenance IDs must wrap on narrow phones. */
+.history-pending-section small { overflow-wrap: anywhere; }
+.history-pending-section form { margin-block: 1rem; }

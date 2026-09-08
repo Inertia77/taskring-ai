@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { CalibrationPanel } from './CalibrationPanel'
 import { useQuery } from '@tanstack/react-query'
 import { createHistoryRepository, type HistoryRepository } from '../../data/history/historyRepository'
 import { commandDisplayAction } from '../../data/offline/projection'
@@ -104,6 +105,8 @@ export function HistoryPage({
         <h1 id="history-title">History</h1>
         <p className="page-summary">Immutable server facts plus clearly separated local Pending Sync commands.</p>
       </header>
+
+      <CalibrationPanel key={userId} userId={userId} online={online} />
 
       {visiblePending.length > 0 ? (
         <section className="history-pending-section" aria-labelledby="pending-history-title">
