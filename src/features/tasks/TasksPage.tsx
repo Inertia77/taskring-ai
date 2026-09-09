@@ -450,7 +450,7 @@ export function TasksPage({ userId, online, repositories }: TasksPageProps) {
         <div>
           <p className="page-kicker">Management</p>
           <h1 id="tasks-title">Tasks</h1>
-          <p className="page-summary">Define work and projects here. Completion belongs to the future Today execution flow.</p>
+          <p className="page-summary">Manage work and projects here. Record execution from Today.</p>
         </div>
         <button className="primary-button compact" type="button" onClick={() => surface === 'tasks' ? setTaskEditor({ mode: 'create' }) : setProjectEditor({ mode: 'create' })}>
           {surface === 'tasks' ? 'New Task' : 'New Project'}
