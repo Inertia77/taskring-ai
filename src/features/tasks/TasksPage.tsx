@@ -329,7 +329,27 @@ function ProjectCard({ project, busy, onEdit, onCancel }: { project: Project; bu
           <h3>{project.title}</h3>
           <p>{project.target_date ? `Target ${project.target_date}` : 'No target date'}</p>
         </div>
-        <span className={`status-chip ${project.status === 'cancelled' ? 'cancelle…303 tokens truncated…tories
+        <span className={`status-chip ${project.status === 'cancelled' ? 'cancelled' : ''}`}>{project.status}</span>
+      </div>
+      <div className="metadata-row">{project.priority_hint ? <span>{project.priority_hint}</span> : <span>No priority</span>}</div>
+      {project.notes ? <p className="card-description">{project.notes}</p> : null}
+      <div className="card-actions">
+        <button type="button" className="quiet-button" onClick={onEdit} disabled={busy || project.status === 'cancelled'}>Edit</button>
+        <button type="button" className="danger-button" onClick={onCancel} disabled={busy || project.status === 'cancelled'}>Cancel</button>
+      </div>
+    </article>
+  )
+}
+
+export function TasksPage({ userId, online, repositories }: TasksPageProps) {
+  const queryClient = useQueryClient()
+  const [surface, setSurface] = useState<Surface>('tasks')
+  const [taskEditor, setTaskEditor] = useState<TaskEditorState | null>(null)
+  const [projectEditor, setProjectEditor] = useState<ProjectEditorState | null>(null)
+  const [actionMessage, setActionMessage] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
+
+  const resolvedRepositories = useMemo<ManagementRepositories | null>(() => {
+    if (repositories) return repositories
     if (!supabase) return null
     return {
       tasks: createTaskRepository(supabase, userId),
