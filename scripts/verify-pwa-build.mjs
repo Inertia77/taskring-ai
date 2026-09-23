@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
+import { env } from 'node:process'
 
 const dist = 'dist'
 const manifestPath = join(dist, 'manifest.webmanifest')
@@ -26,7 +27,7 @@ assertPngDimensions(icon192Path, 192, 192)
 assertPngDimensions(icon512Path, 512, 512)
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-const configuredBase = process.env.VITE_BASE_PATH || '/'
+const configuredBase = env.VITE_BASE_PATH || '/'
 const expectedBase = configuredBase.endsWith('/') ? configuredBase : `${configuredBase}/`
 
 assert.equal(manifest.name, 'TaskRing AI Secretary')
