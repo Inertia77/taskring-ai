@@ -26,11 +26,14 @@ assertPngDimensions(icon192Path, 192, 192)
 assertPngDimensions(icon512Path, 512, 512)
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+const configuredBase = process.env.VITE_BASE_PATH || '/'
+const expectedBase = configuredBase.endsWith('/') ? configuredBase : `${configuredBase}/`
+
 assert.equal(manifest.name, 'TaskRing AI Secretary')
 assert.equal(manifest.short_name, 'TaskRing')
 assert.equal(manifest.display, 'standalone')
-assert.equal(manifest.start_url, '/')
-assert.equal(manifest.scope, '/')
+assert.equal(manifest.start_url, expectedBase)
+assert.equal(manifest.scope, expectedBase)
 
 const iconSizes = new Set((manifest.icons ?? []).map((icon) => icon.sizes))
 assert.ok(iconSizes.has('192x192'), 'manifest must declare a 192x192 icon')

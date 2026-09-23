@@ -17,6 +17,22 @@ export interface ResolvedAppRoute {
   redirectTo: AppRoutePath | null
 }
 
+const BASE_PATH = import.meta.env.BASE_URL === '/'
+  ? ''
+  : import.meta.env.BASE_URL.replace(/\/$/, '')
+
+function toAppPath(pathname: string) {
+  if (!BASE_PATH) return pathname
+  if (pathname === BASE_PATH || pathname === `${BASE_PATH}/`) return '/'
+  if (pathname.startsWith(`${BASE_PATH}/`)) return pathname.slice(BASE_PATH.length)
+  return pathname
+}
+
+function toBrowserPath(pathname: string) {
+  if (!BASE_PATH) return pathname
+  return pathname === '/' ? `${BASE_PATH}/` : `${BASE_PATH}${pathname}`
+}
+
 function normalizePath(pathname: string) {
   if (!pathname || pathname === '/') return '/'
   const withoutQuery = pathname.split(/[?#]/, 1)[0] ?? pathname
@@ -24,7 +40,7 @@ function normalizePath(pathname: string) {
 }
 
 export function resolveAppRoute(pathname: string): ResolvedAppRoute {
-  const normalized = normalizePath(pathname)
+  const normalized = normalizePath(toAppPath(pathname))
   const matched = PRIMARY_ROUTES.find((route) => route.path === normalized)
 
   if (matched) {
@@ -35,24 +51,27 @@ export function resolveAppRoute(pathname: string): ResolvedAppRoute {
 }
 
 export function useAppRouter() {
-  const [pathname, setPathname] = useState(() => window.location.pathname)
+  const [pathname, setPathname] = useState(() => toAppPath(window.location.pathname))
   const resolved = useMemo(() => resolveAppRoute(pathname), [pathname])
 
   useEffect(() => {
-    if (resolved.redirectTo && window.location.pathname !== resolved.redirectTo) {
-      window.history.replaceState(null, '', resolved.redirectTo)
+    if (!resolved.redirectTo) return
+    const targetPath = toBrowserPath(resolved.redirectTo)
+    if (window.location.pathname !== targetPath) {
+      window.history.replaceState(null, '', targetPath)
     }
   }, [resolved.redirectTo])
 
   useEffect(() => {
-    const handlePopState = () => setPathname(window.location.pathname)
+    const handlePopState = () => setPathname(toAppPath(window.location.pathname))
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const navigate = useCallback((nextPath: AppRoutePath) => {
-    if (window.location.pathname === nextPath) return
-    window.history.pushState(null, '', nextPath)
+    const targetPath = toBrowserPath(nextPath)
+    if (window.location.pathname === targetPath) return
+    window.history.pushState(null, '', targetPath)
     setPathname(nextPath)
   }, [])
 
